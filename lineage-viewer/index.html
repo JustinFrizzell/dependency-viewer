@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lineage viewer</title>
+</head>
+<body>
+  <header><h1>Lineage viewer</h1><span>Table lineage</span></header>
+  <main>
+    <div id="graph" role="img" aria-label="Directed table lineage graph" aria-describedby="graph-summary"></div>
+    <p id="status" role="status"></p>
+    <div id="graph-summary" class="visually-hidden"></div>
+    <details id="table-list" open hidden>
+      <summary>Tables</summary>
+      <div class="table-list-content">
+        <label for="table-search">Search tables</label>
+        <input id="table-search" type="search" autocomplete="off" placeholder="Search full table names">
+        <p id="table-search-status" role="status"></p>
+        <ul id="table-results"></ul>
+      </div>
+    </details>
+    <div id="legend" hidden><span class="legend-swatch"></span> Undocumented input table</div>
+    <div id="lineage-views" aria-label="Lineage view" hidden>
+      <button type="button" data-view="all" aria-pressed="true">All</button>
+      <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
+      <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
+      <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
+    </div>
+    <div class="controls" aria-label="Graph navigation" hidden>
+      <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <output id="zoom-level" aria-label="Zoom level"></output>
+      <button id="fit" type="button">Reset to fit</button>
+    </div>
+  </main>
+  <footer id="selection-status" aria-live="polite">No table selected. Select a table to inspect its details.</footer>
+  <script id="lineage-data" type="application/json">__LINEAGE_DATA_JSON__</script>
+</body>
+</html>

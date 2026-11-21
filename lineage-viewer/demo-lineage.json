@@ -1,0 +1,139 @@
+{
+  "tables": [
+    {
+      "name": "raw.orders",
+      "description": "Order headers exported from the commerce platform.",
+      "inputs": []
+    },
+    {
+      "name": "raw.order_lines",
+      "description": "One source row per item on a customer order.",
+      "inputs": []
+    },
+    {
+      "name": "raw.customers",
+      "description": "Customer accounts and signup attributes.",
+      "inputs": []
+    },
+    {
+      "name": "raw.products",
+      "description": "Product catalog with current list prices and categories.",
+      "inputs": []
+    },
+    {
+      "name": "staging.orders",
+      "description": "Cleaned orders with normalized timestamps and customer keys.",
+      "inputs": ["raw.orders", "raw.customers"]
+    },
+    {
+      "name": "staging.order_lines",
+      "description": "Validated order lines joined to product details.",
+      "inputs": ["raw.order_lines", "raw.products", "raw.orders"]
+    },
+    {
+      "name": "intermediate.order_revenue",
+      "description": "Net revenue per order line after discounts and refunds.",
+      "inputs": ["staging.order_lines", "staging.orders"]
+    },
+    {
+      "name": "intermediate.customer_activity",
+      "description": "First order, latest order, and order frequency by customer.",
+      "inputs": ["staging.orders"]
+    },
+    {
+      "name": "mart.daily_revenue",
+      "description": "Daily gross and net sales by channel and currency.",
+      "inputs": ["intermediate.order_revenue"]
+    },
+    {
+      "name": "mart.customer_value",
+      "description": "Lifetime and trailing-90-day value for each customer.",
+      "inputs": ["intermediate.order_revenue", "intermediate.customer_activity"]
+    },
+    {
+      "name": "mart.product_performance",
+      "description": "Units sold, returns, and revenue by product.",
+      "inputs": ["intermediate.order_revenue", "raw.products"]
+    },
+    {
+      "name": "report.commerce_pulse",
+      "description": "Executive snapshot of sales, customer value, and top products.",
+      "inputs": ["mart.daily_revenue", "mart.customer_value", "mart.product_performance"]
+    },
+    {
+      "name": "raw.app_events",
+      "description": "Product interaction events emitted by web and mobile clients.",
+      "inputs": []
+    },
+    {
+      "name": "raw.accounts",
+      "description": "Workspace accounts and their creation dates.",
+      "inputs": []
+    },
+    {
+      "name": "raw.plans",
+      "description": "Subscription plan definitions and feature entitlements.",
+      "inputs": []
+    },
+    {
+      "name": "staging.account_events",
+      "description": "Events cleaned and attributed to a workspace account.",
+      "inputs": ["raw.app_events", "raw.accounts"]
+    },
+    {
+      "name": "intermediate.account_sessions",
+      "description": "Product sessions with duration and active-day measures.",
+      "inputs": ["staging.account_events"]
+    },
+    {
+      "name": "intermediate.feature_usage",
+      "description": "Weekly feature use by account and subscription plan.",
+      "inputs": ["intermediate.account_sessions", "raw.plans"]
+    },
+    {
+      "name": "mart.feature_adoption",
+      "description": "Adoption and retention metrics for each product feature.",
+      "inputs": ["intermediate.feature_usage"]
+    },
+    {
+      "name": "report.product_health",
+      "description": "Weekly product health scorecard for the growth team.",
+      "inputs": ["mart.feature_adoption", "intermediate.account_sessions"]
+    },
+    {
+      "name": "raw.shipments",
+      "description": "Fulfillment records exported by the warehouse system.",
+      "inputs": []
+    },
+    {
+      "name": "raw.tracking_events",
+      "description": "Carrier scans such as picked up, in transit, and delivered.",
+      "inputs": []
+    },
+    {
+      "name": "raw.support_cases",
+      "description": "Customer support cases tagged as delivery-related.",
+      "inputs": []
+    },
+    {
+      "name": "staging.delivery_events",
+      "description": "Deduplicated carrier scans matched to shipment identifiers.",
+      "inputs": ["raw.tracking_events", "raw.shipments"]
+    },
+    {
+      "name": "intermediate.delivery_metrics",
+      "description": "Transit time and on-time status by shipment and carrier.",
+      "inputs": ["staging.delivery_events"]
+    },
+    {
+      "name": "mart.fulfillment_scorecard",
+      "description": "Weekly delivery performance alongside customer-reported issues.",
+      "inputs": ["intermediate.delivery_metrics", "raw.support_cases"]
+    },
+    {
+      "name": "reference.public_holidays",
+      "description": "Calendar of public holidays used for business-day planning.",
+      "inputs": []
+    }
+  ]
+}
