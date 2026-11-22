@@ -2,6 +2,7 @@ require('./style.css');
 const cytoscape = require('cytoscape');
 const dagre = require('cytoscape-dagre');
 const { parseLineage } = require('./data');
+const { setupEdgeMotion } = require('./edge-motion');
 cytoscape.use(dagre);
 
 const status = document.getElementById('status');
@@ -45,7 +46,7 @@ function showGraph(data) {
       { selector: 'node', style: { 'label': 'data(label)', 'shape': 'round-rectangle', 'width': 200, 'height': 54, 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2, 'color': '#204152', 'font-size': 12, 'text-wrap': 'wrap', 'text-max-width': 180, 'text-halign': 'center', 'text-valign': 'center' } },
       { selector: 'node.undocumented', style: { 'border-style': 'dashed', 'border-color': '#c08b3a', 'background-color': '#fff9ec' } },
       { selector: 'node.inspected', style: { 'border-color': '#168a80', 'border-width': 4 } },
-      { selector: 'edge', style: { 'width': 2, 'line-color': '#99b0b9', 'target-arrow-color': '#99b0b9', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier' } },
+      { selector: 'edge', style: { 'width': 2, 'line-color': '#99b0b9', 'target-arrow-color': '#99b0b9', 'target-arrow-shape': 'triangle', 'curve-style': 'taxi', 'taxi-direction': 'rightward', 'taxi-radius': 6, 'line-style': 'dashed', 'line-dash-pattern': [8, 6] } },
       { selector: '.filtered-out', style: { 'display': 'none' } },
     ],
     layout: { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80, fit: true, padding: 45, animate: false },
@@ -200,6 +201,7 @@ function showGraph(data) {
   updateZoom();
   document.getElementById('legend').hidden = false;
   document.querySelector('.controls').hidden = false;
+  setupEdgeMotion(window, document, graph, document.getElementById('edge-motion'));
   document.getElementById('fit').addEventListener('click', () => graph.fit(graph.elements().not('.filtered-out'), 45));
   function zoom(factor) {
     graph.zoom({ level: graph.zoom() * factor, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } });

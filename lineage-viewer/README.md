@@ -8,7 +8,7 @@ npm run build:lineage
 npm run test:lineage
 ```
 
-The build writes `dist/lineage-viewer.html`. Its scripts and styles are embedded; recipients can open an injected copy directly with `file://`, without a server or network. Drag the canvas to pan; use the wheel or zoom buttons to zoom and **Reset to fit** to fit the current view. Select a node to inspect its description and direct relationships, then select a related table to navigate to its details. Use the collapsible **Tables** list to search full names case-insensitively; selecting a result opens its details and centers it on the canvas. Dashed amber nodes are undocumented inputs and are also searchable.
+The build writes `dist/lineage-viewer.html`. Its scripts and styles are embedded; recipients can open an injected copy directly with `file://`, without a server or network. The left-to-right Dagre layout uses rounded orthogonal relationships with marching-ant dashes. Drag the canvas to pan; use the wheel or zoom buttons to zoom and **Reset to fit** to fit the current view. Use **Pause edge motion** to stop the animation; reduced-motion preferences disable it automatically and it also stops while the page is hidden. Select a node to inspect its description and direct relationships, then select a related table to navigate to its details. Use the collapsible **Tables** list to search full names case-insensitively; selecting a result opens its details and centers it on the canvas. Dashed amber nodes are undocumented inputs and are also searchable.
 
 After selecting a table, use **Upstream**, **Downstream**, or **Connected** to show its transitive inputs, outputs, or both. Selecting another table while filtered refocuses and fits the view. Search selections also center the table, zooming out further when needed to keep its filtered graph visible. **All** restores and fits the complete graph without clearing the selection.
 
@@ -21,7 +21,19 @@ The root object has a required `tables` array (which may be empty). Each table h
 For example, after safe serialization and injection, this dataset produces a graph from `raw.orders` to `mart.orders`:
 
 ```json
-{"tables":[{"name":"raw.orders","inputs":[]},{"name":"mart.orders","description":"Orders","inputs":["raw.orders"]}]}
+{
+  "tables": [
+    {
+      "name": "raw.orders",
+      "inputs": []
+    },
+    {
+      "name": "mart.orders",
+      "description": "Orders",
+      "inputs": ["raw.orders"]
+    }
+  ]
+}
 ```
 
 ## Acceptance walkthrough
@@ -38,6 +50,7 @@ These are test fixtures, not a production validator or injector. On an isolated 
 - Search `db.raw` and verify `DB.Raw` and `db.raw` are separate results; select each and inspect its details.
 - Search and select `table_4`; verify the quoted Unicode description including `</script>` is visible as text, the repeated `missing` input appears once, and `table_3` is its other input. Select `missing` and verify its undocumented, unknown details; navigate back to `table_4`.
 - Inspect the left-to-right edges from `DB.Raw` through `table_4`. Select **Upstream**, **Downstream**, and **Connected**, including a four-edge path; change the selection while filtered. Select **All** and verify the full graph returns with the selection retained.
+- Verify the edges use rounded orthogonal paths with moving dashes. Pause and resume edge motion, then confirm it remains disabled when the browser requests reduced motion.
 - Drag to pan, zoom using the wheel and buttons, and reset to fit. Collapse and reopen the table list.
 - Open `dist/lineage-acceptance-empty.html` directly and verify the empty state. Open the unmodified `dist/lineage-viewer.html` and verify the missing-data message.
 
