@@ -44,8 +44,8 @@ function setupEdgeMotion(window, document, graph, button) {
       button.disabled = true;
     } else {
       button.disabled = false;
-      button.textContent = manuallyPaused ? 'Resume edge motion' : 'Pause edge motion';
-      button.setAttribute('aria-label', button.textContent);
+      button.textContent = manuallyPaused ? 'Resume' : 'Pause';
+      button.setAttribute('aria-label', manuallyPaused ? 'Resume edge motion' : 'Pause edge motion');
     }
   }
 

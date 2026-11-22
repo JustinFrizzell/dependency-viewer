@@ -80,7 +80,7 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
 
 test('edge motion advances visible-edge dash offsets at one cycle per second', () => {
   const view = fixture();
-  assert.equal(view.button.textContent, 'Pause edge motion');
+  assert.equal(view.button.textContent, 'Pause');
   view.runFrame(100);
   view.runFrame(350);
   assert.deepEqual(view.offsets, [0, -3.5]);
@@ -91,7 +91,7 @@ test('edge motion advances visible-edge dash offsets at one cycle per second', (
 test('edge motion pauses, resumes, and stops while the page is hidden', () => {
   const view = fixture();
   view.button.click();
-  assert.equal(view.button.textContent, 'Resume edge motion');
+  assert.equal(view.button.textContent, 'Resume');
   assert.equal(view.frames.size, 0);
   view.button.click();
   assert.equal(view.frames.size, 1);
@@ -107,7 +107,7 @@ test('reduced-motion preference blocks animation and changes with the preference
   assert.equal(view.button.disabled, true);
   assert.equal(view.frames.size, 0);
   view.emitMotionPreference(false);
-  assert.equal(view.button.textContent, 'Pause edge motion');
+  assert.equal(view.button.textContent, 'Pause');
   assert.equal(view.button.disabled, false);
   assert.equal(view.frames.size, 1);
 });
