@@ -10,6 +10,7 @@
   <main>
     <div id="graph" role="img" aria-label="Directed table lineage graph" aria-describedby="graph-summary"></div>
     <p id="status" role="status"></p>
+    <p id="graph-filter-status" role="status"></p>
     <div id="graph-summary" class="visually-hidden"></div>
     <details id="table-list" open hidden>
       <summary>Tables</summary>
@@ -33,6 +34,7 @@
       </div>
     </details>
     <div id="lineage-views" aria-label="Lineage view" hidden>
+      <input id="graph-filter" type="search" aria-label="Filter graph by table name" autocomplete="off" placeholder="Filter table names">
       <button type="button" data-view="all" aria-pressed="true">All</button>
       <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
       <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>

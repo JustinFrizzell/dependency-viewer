@@ -12,6 +12,8 @@ The build writes `dist/lineage-viewer.html` and `dist/lineage-demo.html`, which 
 
 After selecting a table, use **Upstream**, **Downstream**, or **Connected** to show its transitive inputs, outputs, or both. Selecting another table while filtered refocuses and fits the view. Search selections also center the table, zooming out further when needed to keep its filtered graph visible. **All** restores and fits the complete graph without clearing the selection.
 
+Use **Filter table names** beside the lineage views to show only tables whose full names contain the entered text, ignoring case and surrounding whitespace. It filters the current view and hides relationships to hidden tables; the graph fits the remaining tables as you type. Switching views keeps the filter, while clearing it restores the current view. A hidden selected table remains the view's anchor. Selecting a nonmatching table from the Tables list or details panel clears the filter. The filter starts empty on reload.
+
 Use **Colours** to colour tables whose full names contain a rule's text, ignoring case. The first matching rule wins; use the arrows to change priority. Bronze, silver, and gold are enabled by default, with three more colours available. Blank rules are ignored. Toggle colouring off or use **Reset** to restore the default rules and order. Changes last until the page is reloaded; undocumented and selection borders remain visible.
 
 Collapse **Table details** at the bottom to give the graph more room; expand it again to see the current selection.

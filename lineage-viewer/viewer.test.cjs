@@ -250,6 +250,99 @@ test('table search matches full names case-insensitively without merging identit
   } finally { dom.window.close(); }
 });
 
+test('graph name filter intersects lineage views and hides edges to nonmatching tables', () => {
+  const dom = open(injected({ tables: [
+    { name: 'DB.Raw.Orders', inputs: [] },
+    { name: 'db.mart.orders', inputs: ['DB.Raw.Orders'] },
+    { name: 'db.mart.customers', inputs: ['db.mart.orders'] },
+    { name: 'other.orders', inputs: [] },
+  ] }));
+  try {
+    const document = dom.window.document;
+    const filter = document.getElementById('graph-filter');
+    const summary = document.getElementById('graph-summary');
+    const status = document.getElementById('graph-filter-status');
+    const setFilter = value => {
+      filter.value = value;
+      filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+    const result = name => [...document.querySelectorAll('#table-results button')].find(button => button.title === name);
+    result('db.mart.orders').click();
+    document.querySelector('[data-view="connected"]').click();
+    setFilter('  ORDERS  ');
+    assert.match(summary.textContent, /Tables: DB\.Raw\.Orders, db\.mart\.orders/);
+    assert.match(summary.textContent, /DB\.Raw\.Orders → db\.mart\.orders/);
+    assert.doesNotMatch(summary.textContent, /customers|other\.orders/);
+    assert.equal(document.querySelectorAll('#table-results button').length, 4);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'db.mart.orders');
+    document.querySelector('[data-view="downstream"]').click();
+    assert.equal(filter.value, '  ORDERS  ');
+    assert.match(summary.textContent, /Tables: db\.mart\.ordersRelationships: none/);
+    setFilter('customers');
+    assert.match(summary.textContent, /Tables: db\.mart\.customersRelationships: none/);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'db.mart.orders');
+    document.querySelector('[data-view="upstream"]').click();
+    assert.equal(status.textContent, 'No matching tables.');
+    document.getElementById('fit').click();
+    setFilter('   ');
+    assert.equal(status.textContent, '');
+    assert.match(summary.textContent, /Tables: DB\.Raw\.Orders, db\.mart\.orders/);
+  } finally { dom.window.close(); }
+});
+
+test('selecting a nonmatching table clears the graph filter from either navigation panel', () => {
+  const dom = open(injected({ tables: [
+    { name: 'input', inputs: [] }, { name: 'output', inputs: ['input'] },
+  ] }));
+  try {
+    const document = dom.window.document;
+    const filter = document.getElementById('graph-filter');
+    const setFilter = value => {
+      filter.value = value;
+      filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+    const result = name => [...document.querySelectorAll('#table-results button')].find(button => button.title === name);
+    setFilter('input');
+    result('output').click();
+    assert.equal(filter.value, '');
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'output');
+    assert.match(document.getElementById('graph-summary').textContent, /input → output/);
+    setFilter('output');
+    document.querySelector('#selection-status .related-table').click();
+    assert.equal(filter.value, '');
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'input');
+    assert.match(document.getElementById('graph-summary').textContent, /input → output/);
+    setFilter('input');
+    result('input').click();
+    assert.equal(filter.value, 'input');
+  } finally { dom.window.close(); }
+});
+
+test('filtering fits the matching graph node and leaves zoom unchanged when no tables match', () => {
+  const dom = open(injected({ tables: [
+    { name: 'first', inputs: [] }, { name: 'second', inputs: ['first'] },
+    { name: 'third', inputs: ['second'] },
+  ] }));
+  try {
+    const document = dom.window.document;
+    const filter = document.getElementById('graph-filter');
+    const setFilter = value => {
+      filter.value = value;
+      filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+    document.getElementById('zoom-out').click();
+    const before = document.getElementById('zoom-level').textContent;
+    setFilter('third');
+    const fitted = document.getElementById('zoom-level').textContent;
+    assert.notEqual(fitted, before);
+    clickGraph(dom, 500, 300);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'third');
+    setFilter('absent');
+    assert.equal(document.getElementById('zoom-level').textContent, fitted);
+    assert.equal(document.getElementById('graph-filter-status').textContent, 'No matching tables.');
+  } finally { dom.window.close(); }
+});
+
 test('selecting a search result opens its details and centers that exact table', () => {
   const dom = open(injected({ tables: [
     { name: 'DB.Raw', inputs: ['missing'], description: 'Uppercase table' },

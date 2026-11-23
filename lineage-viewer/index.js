@@ -116,9 +116,12 @@ function showGraph(data) {
   document.getElementById('table-list').hidden = false;
   const inspector = document.getElementById('selection-status');
   const views = document.getElementById('lineage-views');
+  const graphFilter = document.getElementById('graph-filter');
+  const filterStatus = document.getElementById('graph-filter-status');
   const viewButtons = [...views.querySelectorAll('button')];
   let selected = null;
   let view = 'all';
+  const filterQuery = () => graphFilter.value.trim().toLowerCase();
   function reachable(start, neighbors) {
     const visited = new Set([start]);
     const pending = [start];
@@ -140,6 +143,10 @@ function showGraph(data) {
     if (view === 'downstream' || view === 'connected') {
       for (const name of reachable(selected, name => downstream.get(name))) visible.add(name);
     }
+    const query = filterQuery();
+    for (const name of visible) {
+      if (!name.toLowerCase().includes(query)) visible.delete(name);
+    }
     graph.nodes().forEach(node => node.toggleClass('filtered-out', !visible.has(node.data('name'))));
     graph.edges().forEach(edge => edge.toggleClass('filtered-out',
       !visible.has(edge.source().data('name')) || !visible.has(edge.target().data('name'))));
@@ -147,12 +154,14 @@ function showGraph(data) {
       .map(table => table.name + (table.documented ? '' : ' (undocumented)')).join(', ');
     relationships.textContent = 'Relationships: ' + (data.edges.filter(edge => visible.has(edge.source) && visible.has(edge.target))
       .map(edge => `${edge.source} → ${edge.target}`).join(', ') || 'none');
+    filterStatus.textContent = query && !visible.size ? 'No matching tables.' : '';
     for (const button of viewButtons) {
       button.disabled = button.dataset.view !== 'all' && selected === null;
       button.setAttribute('aria-pressed', String(button.dataset.view === view));
     }
-    if (fit) graph.fit(graph.elements().not('.filtered-out'), 45);
+    if (fit && visible.size) graph.fit(graph.elements().not('.filtered-out'), 45);
   }
+  graphFilter.addEventListener('input', () => updateView(true));
   for (const button of viewButtons) {
     button.addEventListener('click', () => {
       view = button.dataset.view;
@@ -163,10 +172,12 @@ function showGraph(data) {
   updateView(false);
   function selectTable(name) {
     const table = tables.get(name);
+    const clearFilter = !name.toLowerCase().includes(filterQuery());
+    if (clearFilter) graphFilter.value = '';
     selected = name;
     graph.nodes().removeClass('inspected');
     graph.getElementById(ids.get(name)).addClass('inspected');
-    updateView(view !== 'all');
+    updateView(clearFilter || view !== 'all');
     inspector.replaceChildren();
     const heading = document.createElement('h2');
     heading.textContent = table.name;
@@ -227,7 +238,10 @@ function showGraph(data) {
   document.getElementById('legend').hidden = false;
   document.querySelector('.controls').hidden = false;
   setupEdgeMotion(window, document, graph, document.getElementById('edge-motion'));
-  document.getElementById('fit').addEventListener('click', () => graph.fit(graph.elements().not('.filtered-out'), 45));
+  document.getElementById('fit').addEventListener('click', () => {
+    const visible = graph.elements().not('.filtered-out');
+    if (visible.length) graph.fit(visible, 45);
+  });
   function zoom(factor) {
     graph.zoom({ level: graph.zoom() * factor, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } });
   }

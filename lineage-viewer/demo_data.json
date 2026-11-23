@@ -26,14 +26,14 @@
       "inputs": ["workspace.lakehouse.bronze_raw.orders", "workspace.lakehouse.bronze_raw.customers"]
     },
     {
-      "name": "workspace.lakehouse.silver_staging.order_lines",
+      "name": "workspace1.lakehouse.silver_staging.order_lines",
       "description": "Validated order lines joined to product details.",
-      "inputs": ["workspace.lakehouse.bronze_raw.order_lines", "workspace.lakehouse.bronze_raw.products", "workspace.lakehouse.bronze_raw.orders"]
+      "inputs": ["workspace1.lakehouse.bronze_raw.order_lines", "workspace1.lakehouse.bronze_raw.products", "workspace1.lakehouse.bronze_raw.orders"]
     },
     {
-      "name": "workspace.lakehouse.silver_intermediate.order_revenue",
+      "name": "workspace1.lakehouse.silver_intermediate.order_revenue",
       "description": "Net revenue per order line after discounts and refunds.",
-      "inputs": ["workspace.lakehouse.silver_staging.order_lines", "workspace.lakehouse.silver_staging.orders"]
+      "inputs": ["workspace1.lakehouse.silver_staging.order_lines", "workspace1.lakehouse.silver_staging.orders"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.customer_activity",
@@ -43,22 +43,22 @@
     {
       "name": "workspace.lakehouse.gold_mart.daily_revenue",
       "description": "Daily gross and net sales by channel and currency.",
-      "inputs": ["workspace.lakehouse.silver_intermediate.order_revenue"]
+      "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue"]
     },
     {
-      "name": "workspace.lakehouse.gold_mart.customer_value",
+      "name": "workspace1.lakehouse.gold_mart.customer_value",
       "description": "Lifetime and trailing-90-day value for each customer.",
-      "inputs": ["workspace.lakehouse.silver_intermediate.order_revenue", "workspace.lakehouse.silver_intermediate.customer_activity"]
+      "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.silver_intermediate.customer_activity"]
     },
     {
-      "name": "workspace.lakehouse.gold_mart.product_performance",
+      "name": "workspace1.lakehouse.gold_mart.product_performance",
       "description": "Units sold, returns, and revenue by product.",
-      "inputs": ["workspace.lakehouse.silver_intermediate.order_revenue", "workspace.lakehouse.bronze_raw.products"]
+      "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.bronze_raw.products"]
     },
     {
-      "name": "workspace.report.commerce_pulse",
+      "name": "workspace1.report.commerce_pulse",
       "description": "Executive snapshot of sales, customer value, and top products.",
-      "inputs": ["workspace.lakehouse.gold_mart.daily_revenue", "workspace.lakehouse.gold_mart.customer_value", "workspace.lakehouse.gold_mart.product_performance"]
+      "inputs": ["workspace1.lakehouse.gold_mart.daily_revenue", "workspace1.lakehouse.gold_mart.customer_value", "workspace1.lakehouse.gold_mart.product_performance"]
     },
     {
       "name": "workspace.lakehouse.bronze_raw.app_events",
