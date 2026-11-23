@@ -30,9 +30,15 @@ function showGraph(data) {
   const relationships = document.createElement('p');
   summary.appendChild(relationships);
 
+  function nameParts(name) {
+    const dot = name.lastIndexOf('.');
+    return dot < 0 || dot === name.length - 1
+      ? { short: name, prefix: '' }
+      : { short: name.slice(dot + 1), prefix: name.slice(0, dot) };
+  }
   const ids = new Map(data.tables.map((table, index) => [table.name, `table-${index}`]));
   const elements = data.tables.map(table => ({
-    data: { id: ids.get(table.name), label: table.name },
+    data: { id: ids.get(table.name), name: table.name, label: nameParts(table.name).short },
     classes: table.documented ? '' : 'undocumented',
   })).concat(data.edges.map((edge, index) => ({
     data: { id: `edge-${index}`, source: ids.get(edge.source), target: ids.get(edge.target) },
@@ -44,7 +50,7 @@ function showGraph(data) {
     minZoom: 0.01,
     maxZoom: 4,
     style: [
-      { selector: 'node', style: { 'label': 'data(label)', 'shape': 'round-rectangle', 'width': 200, 'height': 54, 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2, 'color': '#204152', 'font-size': 12, 'text-wrap': 'wrap', 'text-max-width': 180, 'text-halign': 'center', 'text-valign': 'center' } },
+      { selector: 'node', style: { 'label': 'data(label)', 'shape': 'round-rectangle', 'width': 200, 'height': 54, 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2, 'color': '#204152', 'font-size': 12, 'text-wrap': 'ellipsis', 'text-max-width': 180, 'text-halign': 'center', 'text-valign': 'center' } },
       { selector: 'node.undocumented', style: { 'border-style': 'dashed', 'border-color': '#c08b3a', 'background-color': '#fff9ec' } },
       { selector: 'node.inspected', style: { 'border-color': '#168a80', 'border-width': 4 } },
       { selector: 'edge', style: lineageEdgeStyle },
@@ -66,7 +72,20 @@ function showGraph(data) {
       const item = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = table.name + (table.documented ? '' : ' (undocumented)');
+      const { short, prefix } = nameParts(table.name);
+      const fullName = table.name + (table.documented ? '' : ' (undocumented)');
+      button.title = fullName;
+      button.setAttribute('aria-label', fullName);
+      const label = document.createElement('span');
+      label.className = 'table-result-name';
+      label.textContent = short + (table.documented ? '' : ' (undocumented)');
+      button.appendChild(label);
+      if (prefix) {
+        const detail = document.createElement('span');
+        detail.className = 'table-result-prefix';
+        detail.textContent = prefix;
+        button.appendChild(detail);
+      }
       button.addEventListener('click', () => {
         selectTable(table.name);
         const node = graph.getElementById(ids.get(table.name));
@@ -118,9 +137,9 @@ function showGraph(data) {
     if (view === 'downstream' || view === 'connected') {
       for (const name of reachable(selected, name => downstream.get(name))) visible.add(name);
     }
-    graph.nodes().forEach(node => node.toggleClass('filtered-out', !visible.has(node.data('label'))));
+    graph.nodes().forEach(node => node.toggleClass('filtered-out', !visible.has(node.data('name'))));
     graph.edges().forEach(edge => edge.toggleClass('filtered-out',
-      !visible.has(edge.source().data('label')) || !visible.has(edge.target().data('label'))));
+      !visible.has(edge.source().data('name')) || !visible.has(edge.target().data('name'))));
     names.textContent = 'Tables: ' + data.tables.filter(table => visible.has(table.name))
       .map(table => table.name + (table.documented ? '' : ' (undocumented)')).join(', ');
     relationships.textContent = 'Relationships: ' + (data.edges.filter(edge => visible.has(edge.source) && visible.has(edge.target))
@@ -195,7 +214,9 @@ function showGraph(data) {
     );
     inspector.appendChild(details);
   }
-  graph.on('tap', 'node', event => selectTable(event.target.data('label')));
+  graph.on('tap', 'node', event => selectTable(event.target.data('name')));
+  graph.on('mouseover', 'node', event => { graph.container().title = event.target.data('name'); });
+  graph.on('mouseout', 'node', () => { graph.container().removeAttribute('title'); });
   const zoomLevel = document.getElementById('zoom-level');
   const updateZoom = () => { zoomLevel.textContent = `${Math.round(graph.zoom() * 100)}%`; };
   graph.on('zoom', updateZoom);

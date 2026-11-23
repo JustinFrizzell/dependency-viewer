@@ -6,13 +6,14 @@ const { JSDOM } = require('jsdom');
 
 const template = () => fs.readFileSync('dist/lineage-viewer.html', 'utf8');
 
-function open(html) {
+function open(html, drawnText = []) {
   return new JSDOM(html, {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
       const context = new Proxy({
         measureText: text => ({ width: text.length * 7 }),
+        fillText: text => { drawnText.push(text); },
         createLinearGradient: () => ({ addColorStop() {} }),
         createRadialGradient: () => ({ addColorStop() {} }),
       }, { get: (target, key) => key in target ? target[key] : () => {} });
@@ -50,7 +51,7 @@ test('built demo embeds the demo dataset and displays its graph', () => {
     assert.ok(document.querySelector('#graph canvas'));
     assert.match(document.getElementById('graph-summary').textContent, /workspace\.lakehouse\.bronze_raw\.orders/);
     const result = [...document.querySelectorAll('#table-results button')]
-      .find(button => button.textContent === 'workspace.report.commerce_pulse');
+      .find(button => button.title === 'workspace.report.commerce_pulse');
     assert.ok(result);
     result.click();
     assert.equal(document.querySelector('#selection-status h2').textContent, 'workspace.report.commerce_pulse');
@@ -216,7 +217,7 @@ test('table search matches full names case-insensitively without merging identit
       search.value = value;
       search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     };
-    const resultNames = () => [...results.querySelectorAll('button')].map(button => button.textContent);
+    const resultNames = () => [...results.querySelectorAll('button')].map(button => button.title);
     searchFor('RAW.ORDER');
     assert.deepEqual(resultNames(), ['DB.Raw.Orders', 'db.raw.orders']);
     searchFor('EXTERNAL.source');
@@ -243,13 +244,43 @@ test('selecting a search result opens its details and centers that exact table',
     for (const [name, description] of [
       ['db.raw', 'Lowercase table'], ['DB.Raw', 'Uppercase table'], ['missing (undocumented)', 'Unknown'],
     ]) {
-      buttons.find(button => button.textContent === name).click();
+      buttons.find(button => button.title === name).click();
       assert.equal(inspector.querySelector('h2').textContent, name.replace(' (undocumented)', ''));
       assert.match(inspector.textContent, new RegExp(description));
       assert.equal(document.getElementById('zoom-level').textContent, zoom);
       clickGraph(dom, 500, 300);
       assert.equal(inspector.querySelector('h2').textContent, name.replace(' (undocumented)', ''));
     }
+  } finally { dom.window.close(); }
+});
+
+test('qualified table labels stay short while preserving distinct identities and full names', async () => {
+  const drawnText = [];
+  const longName = 'a_very_long_table_name_that_will_not_fit_in_the_node';
+  const dom = open(injected({ tables: [
+    { name: 'sales.orders', inputs: [] },
+    { name: 'support.orders', inputs: ['sales.orders'] },
+    { name: `warehouse.schema.${longName}`, inputs: [] },
+  ] }), drawnText);
+  try {
+    const document = dom.window.document;
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    assert.ok(drawnText.includes('orders'));
+    assert.ok(drawnText.some(text => text.endsWith('…') && longName.startsWith(text.slice(0, -1))));
+    assert.ok(!drawnText.includes('sales.orders'));
+    const results = [...document.querySelectorAll('#table-results button')];
+    assert.deepEqual(results.map(button => button.querySelector('.table-result-name').textContent),
+      ['orders', 'orders', longName]);
+    assert.deepEqual(results.map(button => button.querySelector('.table-result-prefix').textContent),
+      ['sales', 'support', 'warehouse.schema']);
+    assert.equal(results[1].getAttribute('aria-label'), 'support.orders');
+    assert.equal(results[1].title, 'support.orders');
+    results[1].click();
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'support.orders');
+    document.querySelector('[data-view="upstream"]').click();
+    assert.match(document.getElementById('graph-summary').textContent, /sales\.orders → support\.orders/);
+    clickGraph(dom, 500, 300);
+    assert.ok(['sales.orders', 'support.orders'].includes(document.querySelector('#selection-status h2').textContent));
   } finally { dom.window.close(); }
 });
 
@@ -277,6 +308,12 @@ test('selecting a graph table opens its inspector without changing the view', ()
     const document = dom.window.document;
     const inspector = document.getElementById('selection-status');
     assert.match(inspector.textContent, /select.*table/i);
+    const graph = document.getElementById('graph');
+    const canvas = graph.querySelector('canvas');
+    canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
+    assert.equal(graph.title, 'warehouse.orders');
+    canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 0, clientY: 0 }));
+    assert.equal(graph.hasAttribute('title'), false);
     document.getElementById('zoom-in').click();
     const zoom = document.getElementById('zoom-level').textContent;
     clickGraph(dom, 500, 300);
@@ -426,12 +463,12 @@ test('generated acceptance files support representative search and lineage navig
       search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     };
     const select = name => [...results.querySelectorAll('button')]
-      .find(button => button.textContent === name).click();
+      .find(button => button.title === name).click();
 
     assert.equal(results.querySelectorAll('button').length, 201);
     assert.match(summary.textContent, /table_198 → table_199/);
     searchFor('db.raw');
-    assert.deepEqual([...results.querySelectorAll('button')].map(button => button.textContent), ['DB.Raw', 'db.raw']);
+    assert.deepEqual([...results.querySelectorAll('button')].map(button => button.title), ['DB.Raw', 'db.raw']);
     select('DB.Raw');
     document.querySelector('[data-view="downstream"]').click();
     assert.match(summary.textContent, /table_3 → table_4/);

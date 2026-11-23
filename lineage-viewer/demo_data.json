@@ -118,7 +118,7 @@
     {
       "name": "workspace.lakehouse.silver_staging.delivery_events",
       "description": "Deduplicated carrier scans matched to shipment identifiers.",
-      "inputs": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments"]
+      "inputs": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments", "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.delivery_metrics",
@@ -131,7 +131,7 @@
       "inputs": ["workspace.lakehouse.silver_intermediate.delivery_metrics", "workspace.lakehouse.bronze_raw.support_cases"]
     },
     {
-      "name": "workspace.lakehouse.bronze_reference.public_holidays",
+      "name": "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference",
       "description": "Calendar of public holidays used for business-day planning.",
       "inputs": []
     }
