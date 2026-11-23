@@ -41,7 +41,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 button { cursor: pointer; font: inherit; border: 1px solid #c9dade; border-radius: 6px; background: white; color: #355565; padding: 8px 12px; }
 button:hover { background: #dff3ef; }
 #zoom-level { padding: 8px; align-self: center; color: #355565; background: white; border-radius: 6px; }
-footer { flex: none; height: min(230px, 35vh); overflow: auto; padding: 14px 24px; border-top: 1px solid #dfe8eb; color: #355565; background: white; }
+footer { flex: none; border-top: 1px solid #dfe8eb; color: #355565; background: white; }
+#inspector[open] { height: min(230px, 35vh); overflow: auto; }
+#inspector summary { cursor: pointer; padding: 10px 24px; font-weight: 600; }
+#selection-status { padding: 4px 24px 14px; }
 footer h2 { display: inline; margin: 0; font-size: 16px; overflow-wrap: anywhere; color: #172b3a; }
 footer h3 { margin: 0 0 5px; font-size: 12px; color: #718692; text-transform: uppercase; }
 footer p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

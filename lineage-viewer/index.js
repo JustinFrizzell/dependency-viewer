@@ -59,6 +59,7 @@ function showGraph(data) {
     ],
     layout: { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80, fit: true, padding: 45, animate: false },
   });
+  document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
   setupColourSettings(document, graph);
   const tables = new Map(data.tables.map(table => [table.name, table]));
   const downstream = new Map(data.tables.map(table => [table.name, []]));

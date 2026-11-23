@@ -46,7 +46,12 @@
       <button id="edge-motion" type="button">Pause</button>
     </div>
   </main>
-  <footer id="selection-status" aria-live="polite">No table selected. Select a table to inspect its details.</footer>
+  <footer>
+    <details id="inspector" open>
+      <summary>Table details</summary>
+      <div id="selection-status" aria-live="polite">No table selected. Select a table to inspect its details.</div>
+    </details>
+  </footer>
   <script id="lineage-data" type="application/json">__LINEAGE_DATA_JSON__</script>
 </body>
 </html>

@@ -116,9 +116,49 @@
       "inputs": []
     },
     {
+      "name": "workspace.lakehouse.bronze_raw.carriers",
+      "description": "Carrier identifiers and service details.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.delivery_routes",
+      "description": "Routes assigned to deliveries.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.delivery_addresses",
+      "description": "Destination addresses for shipments.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.warehouses",
+      "description": "Warehouse locations and fulfillment details.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.packages",
+      "description": "Packages and their shipment assignments.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.delivery_exceptions",
+      "description": "Reported delays and delivery exceptions.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.proof_of_delivery",
+      "description": "Confirmation records for completed deliveries.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.delivery_attempts",
+      "description": "Carrier delivery attempt records.",
+      "inputs": []
+    },
+    {
       "name": "workspace.lakehouse.silver_staging.delivery_events",
       "description": "Deduplicated carrier scans matched to shipment identifiers.",
-      "inputs": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments", "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference"]
+      "inputs": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments", "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference", "workspace.lakehouse.bronze_raw.carriers", "workspace.lakehouse.bronze_raw.delivery_routes", "workspace.lakehouse.bronze_raw.delivery_addresses", "workspace.lakehouse.bronze_raw.warehouses", "workspace.lakehouse.bronze_raw.packages", "workspace.lakehouse.bronze_raw.delivery_exceptions", "workspace.lakehouse.bronze_raw.proof_of_delivery", "workspace.lakehouse.bronze_raw.delivery_attempts"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.delivery_metrics",

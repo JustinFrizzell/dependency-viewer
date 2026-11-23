@@ -74,6 +74,26 @@ function clickGraph(dom, x, y) {
   }
 }
 
+test('table details can be collapsed while selection continues to update', () => {
+  const dom = open(injected({ tables: [
+    { name: 'first', inputs: [] }, { name: 'second', inputs: ['first'] },
+  ] }));
+  try {
+    const document = dom.window.document;
+    const inspector = document.getElementById('inspector');
+    const summary = inspector.querySelector('summary');
+    assert.equal(inspector.open, true);
+    summary.click();
+    assert.equal(inspector.open, false);
+    [...document.querySelectorAll('#table-results button')].find(button => button.title === 'second').click();
+    assert.equal(inspector.open, false);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'second');
+    summary.click();
+    assert.equal(inspector.open, true);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'second');
+  } finally { dom.window.close(); }
+});
+
 test('lineage views require a selection and focus transitively in each direction', () => {
   const dom = open(injected({ tables: [
     { name: 'a', inputs: [] }, { name: 'b', inputs: ['a'] },
