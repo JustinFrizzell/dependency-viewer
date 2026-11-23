@@ -21,6 +21,17 @@
       </div>
     </details>
     <div id="legend" hidden><span class="legend-swatch"></span> Undocumented input table</div>
+    <details id="colour-settings" open hidden>
+      <summary>Colours</summary>
+      <div class="colour-settings-content">
+        <div class="colour-settings-actions">
+          <label><input id="colours-enabled" type="checkbox" checked> Colour tables</label>
+          <button id="reset-colours" type="button">Reset</button>
+        </div>
+        <p>Colour tables when their full name contains this text. The first match wins.</p>
+        <div id="colour-rules"></div>
+      </div>
+    </details>
     <div id="lineage-views" aria-label="Lineage view" hidden>
       <button type="button" data-view="all" aria-pressed="true">All</button>
       <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>

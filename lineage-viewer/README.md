@@ -12,6 +12,8 @@ The build writes `dist/lineage-viewer.html` and `dist/lineage-demo.html`, which 
 
 After selecting a table, use **Upstream**, **Downstream**, or **Connected** to show its transitive inputs, outputs, or both. Selecting another table while filtered refocuses and fits the view. Search selections also center the table, zooming out further when needed to keep its filtered graph visible. **All** restores and fits the complete graph without clearing the selection.
 
+Use **Colours** to colour tables whose full names contain a rule's text, ignoring case. The first matching rule wins; use the arrows to change priority. Bronze, silver, and gold are enabled by default, with three more colours available. Blank rules are ignored. Toggle colouring off or use **Reset** to restore the default rules and order. Changes last until the page is reloaded; undocumented and selection borders remain visible.
+
 ## Data injection
 
 The template has exactly one `__LINEAGE_DATA_JSON__` marker, in the `application/json` script element with ID `lineage-data`. Replace that marker with a JSON object after validating it and verifying the marker occurs exactly once. Serialize JSON safely for HTML by escaping every `<` as `\u003c`; this prevents values such as `</script>` from ending the script element. The separate data project is responsible for validation, safe injection, and preserving its previous output on failure. An unfilled template reports that no data has been embedded.

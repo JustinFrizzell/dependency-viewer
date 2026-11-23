@@ -4,6 +4,7 @@ const dagre = require('cytoscape-dagre');
 const { parseLineage } = require('./data');
 const { setupEdgeMotion } = require('./edge-motion');
 const { lineageEdgeStyle } = require('./edge-style');
+const { setupColourSettings } = require('./colour-settings');
 cytoscape.use(dagre);
 
 const status = document.getElementById('status');
@@ -58,6 +59,7 @@ function showGraph(data) {
     ],
     layout: { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80, fit: true, padding: 45, animate: false },
   });
+  setupColourSettings(document, graph);
   const tables = new Map(data.tables.map(table => [table.name, table]));
   const downstream = new Map(data.tables.map(table => [table.name, []]));
   for (const edge of data.edges) downstream.get(edge.source).push(edge.target);

@@ -21,6 +21,18 @@ main { position: relative; flex: 1; min-height: 0; background-color: #f5f9fa; ba
 .table-result-prefix { color: #718692; font-size: 12px; }
 #legend:not([hidden]) { position: absolute; bottom: 70px; right: 20px; padding: 8px 10px; background: white; border: 1px solid #d5e2e5; border-radius: 6px; }
 .legend-swatch { display: inline-block; width: 16px; height: 12px; vertical-align: middle; border: 2px dashed #c08b3a; background: #fff9ec; }
+#colour-settings:not([hidden]) { position: absolute; top: 76px; right: 20px; width: min(300px, calc(100% - 48px)); max-height: calc(100% - 165px); overflow: auto; background: white; border: 1px solid #d5e2e5; border-radius: 6px; box-shadow: 0 2px 8px #1238491a; }
+#colour-settings:not([open]) { width: auto; }
+#colour-settings summary { cursor: pointer; padding: 10px 12px; font-weight: 600; }
+.colour-settings-content { padding: 0 12px 12px; }
+.colour-settings-content p { margin: 0 0 10px; color: #526e79; font-size: 12px; }
+.colour-settings-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.colour-settings-actions label { display: flex; align-items: center; gap: 5px; }
+#colour-rules { display: grid; gap: 6px; }
+.colour-rule { display: flex; align-items: center; gap: 5px; }
+.colour-rule-swatch { flex: none; width: 20px; height: 20px; border: 1px solid #0003; border-radius: 4px; }
+.colour-rule input { min-width: 0; width: 100%; padding: 6px; border: 1px solid #c9dade; border-radius: 6px; font: inherit; }
+.colour-rule button { flex: none; padding: 5px 7px; }
 #lineage-views:not([hidden]) { position: absolute; top: 20px; right: 20px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 #lineage-views button[aria-pressed="true"] { color: white; background: #087c72; border-color: #087c72; }
 button:disabled { cursor: not-allowed; opacity: .5; }
