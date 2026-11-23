@@ -1,0 +1,139 @@
+{
+  "tables": [
+    {
+      "name": "workspace.lakehouse.bronze_raw.orders",
+      "description": "Order headers exported from the commerce platform.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.order_lines",
+      "description": "One source row per item on a customer order.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.customers",
+      "description": "Customer accounts and signup attributes.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.products",
+      "description": "Product catalog with current list prices and categories.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.silver_staging.orders",
+      "description": "Cleaned orders with normalized timestamps and customer keys.",
+      "inputs": ["workspace.lakehouse.bronze_raw.orders", "workspace.lakehouse.bronze_raw.customers"]
+    },
+    {
+      "name": "workspace.lakehouse.silver_staging.order_lines",
+      "description": "Validated order lines joined to product details.",
+      "inputs": ["workspace.lakehouse.bronze_raw.order_lines", "workspace.lakehouse.bronze_raw.products", "workspace.lakehouse.bronze_raw.orders"]
+    },
+    {
+      "name": "workspace.lakehouse.silver_intermediate.order_revenue",
+      "description": "Net revenue per order line after discounts and refunds.",
+      "inputs": ["workspace.lakehouse.silver_staging.order_lines", "workspace.lakehouse.silver_staging.orders"]
+    },
+    {
+      "name": "workspace.lakehouse.silver_intermediate.customer_activity",
+      "description": "First order, latest order, and order frequency by customer.",
+      "inputs": ["workspace.lakehouse.silver_staging.orders"]
+    },
+    {
+      "name": "workspace.lakehouse.gold_mart.daily_revenue",
+      "description": "Daily gross and net sales by channel and currency.",
+      "inputs": ["workspace.lakehouse.silver_intermediate.order_revenue"]
+    },
+    {
+      "name": "workspace.lakehouse.gold_mart.customer_value",
+      "description": "Lifetime and trailing-90-day value for each customer.",
+      "inputs": ["workspace.lakehouse.silver_intermediate.order_revenue", "workspace.lakehouse.silver_intermediate.customer_activity"]
+    },
+    {
+      "name": "workspace.lakehouse.gold_mart.product_performance",
+      "description": "Units sold, returns, and revenue by product.",
+      "inputs": ["workspace.lakehouse.silver_intermediate.order_revenue", "workspace.lakehouse.bronze_raw.products"]
+    },
+    {
+      "name": "workspace.report.commerce_pulse",
+      "description": "Executive snapshot of sales, customer value, and top products.",
+      "inputs": ["workspace.lakehouse.gold_mart.daily_revenue", "workspace.lakehouse.gold_mart.customer_value", "workspace.lakehouse.gold_mart.product_performance"]
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.app_events",
+      "description": "Product interaction events emitted by web and mobile clients.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.accounts",
+      "description": "Workspace accounts and their creation dates.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.plans",
+      "description": "Subscription plan definitions and feature entitlements.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.silver_staging.account_events",
+      "description": "Events cleaned and attributed to a workspace account.",
+      "inputs": ["workspace.lakehouse.bronze_raw.app_events", "workspace.lakehouse.bronze_raw.accounts"]
+    },
+    {
+      "name": "workspace.lakehouse.silver_intermediate.account_sessions",
+      "description": "Product sessions with duration and active-day measures.",
+      "inputs": ["workspace.lakehouse.silver_staging.account_events"]
+    },
+    {
+      "name": "workspace.lakehouse.silver_intermediate.feature_usage",
+      "description": "Weekly feature use by account and subscription plan.",
+      "inputs": ["workspace.lakehouse.silver_intermediate.account_sessions", "workspace.lakehouse.bronze_raw.plans"]
+    },
+    {
+      "name": "workspace.lakehouse.gold_mart.feature_adoption",
+      "description": "Adoption and retention metrics for each product feature.",
+      "inputs": ["workspace.lakehouse.silver_intermediate.feature_usage"]
+    },
+    {
+      "name": "workspace.report.product_health",
+      "description": "Weekly product health scorecard for the growth team.",
+      "inputs": ["workspace.lakehouse.gold_mart.feature_adoption", "workspace.lakehouse.silver_intermediate.account_sessions"]
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.shipments",
+      "description": "Fulfillment records exported by the warehouse system.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.tracking_events",
+      "description": "Carrier scans such as picked up, in transit, and delivered.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.bronze_raw.support_cases",
+      "description": "Customer support cases tagged as delivery-related.",
+      "inputs": []
+    },
+    {
+      "name": "workspace.lakehouse.silver_staging.delivery_events",
+      "description": "Deduplicated carrier scans matched to shipment identifiers.",
+      "inputs": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments"]
+    },
+    {
+      "name": "workspace.lakehouse.silver_intermediate.delivery_metrics",
+      "description": "Transit time and on-time status by shipment and carrier.",
+      "inputs": ["workspace.lakehouse.silver_staging.delivery_events"]
+    },
+    {
+      "name": "workspace.lakehouse.gold_mart.fulfillment_scorecard",
+      "description": "Weekly delivery performance alongside customer-reported issues.",
+      "inputs": ["workspace.lakehouse.silver_intermediate.delivery_metrics", "workspace.lakehouse.bronze_raw.support_cases"]
+    },
+    {
+      "name": "workspace.lakehouse.bronze_reference.public_holidays",
+      "description": "Calendar of public holidays used for business-day planning.",
+      "inputs": []
+    }
+  ]
+}

@@ -38,6 +38,25 @@ test('built template has one injection point and explains missing data', () => {
   dom.window.close();
 });
 
+test('built demo embeds the demo dataset and displays its graph', () => {
+  const html = fs.readFileSync('dist/lineage-demo.html', 'utf8');
+  const expected = JSON.parse(fs.readFileSync('lineage-viewer/demo_data.json', 'utf8'));
+  const dom = open(html);
+  try {
+    const document = dom.window.document;
+    assert.deepEqual(JSON.parse(document.getElementById('lineage-data').textContent), expected);
+    assert.equal(document.querySelectorAll('script[src], link[href], img[src], iframe[src]').length, 0);
+    assert.equal(document.getElementById('status').textContent, '');
+    assert.ok(document.querySelector('#graph canvas'));
+    assert.match(document.getElementById('graph-summary').textContent, /workspace\.lakehouse\.bronze_raw\.orders/);
+    const result = [...document.querySelectorAll('#table-results button')]
+      .find(button => button.textContent === 'workspace.report.commerce_pulse');
+    assert.ok(result);
+    result.click();
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'workspace.report.commerce_pulse');
+  } finally { dom.window.close(); }
+});
+
 function injected(value) {
   const json = JSON.stringify(value).replace(/</g, '\\u003c');
   return template().replace('__LINEAGE_DATA_JSON__', json);

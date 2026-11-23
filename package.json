@@ -2,7 +2,7 @@
   "scripts": {
     "build": "npm run build:lineage",
     "test": "npm run test:lineage",
-    "build:lineage": "webpack --config lineage-viewer/webpack.config.js",
+    "build:lineage": "webpack --config lineage-viewer/webpack.config.js && node lineage-viewer/build-demo.cjs",
     "test:lineage": "npm run build:lineage && node --test lineage-viewer/*.test.cjs"
   },
   "devDependencies": {

@@ -11,7 +11,7 @@ npm ci
 npm run build
 ```
 
-The self-contained template is written to `dist/lineage-viewer.html`. It contains the `__LINEAGE_DATA_JSON__` marker and must have lineage JSON injected before it displays a graph. See the [viewer guide](lineage-viewer/README.md) for the data format, safe injection details, and acceptance instructions.
+The build writes a self-contained template to `dist/lineage-viewer.html` and a ready-to-open demo to `dist/lineage-demo.html`, populated from `lineage-viewer/demo_data.json`. The template contains the `__LINEAGE_DATA_JSON__` marker and must have lineage JSON injected before it displays a graph. See the [viewer guide](lineage-viewer/README.md) for the data format, safe injection details, and acceptance instructions.
 
 ## Run tests
 
