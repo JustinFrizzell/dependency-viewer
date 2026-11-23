@@ -20,8 +20,6 @@ main { position: relative; flex: 1; min-height: 0; background-color: #f5f9fa; ba
 #table-results button { width: 100%; padding: 6px; border: 0; text-align: left; }
 .table-result-name, .table-result-prefix { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-result-prefix { color: #718692; font-size: 12px; }
-#legend:not([hidden]) { position: absolute; bottom: 70px; right: 20px; padding: 8px 10px; background: white; border: 1px solid #d5e2e5; border-radius: 6px; }
-.legend-swatch { display: inline-block; width: 16px; height: 12px; vertical-align: middle; border: 2px dashed #c08b3a; background: #fff9ec; }
 #colour-settings:not([hidden]) { position: absolute; top: 76px; right: 20px; width: min(300px, calc(100% - 48px)); max-height: calc(100% - 165px); overflow: auto; background: white; border: 1px solid #d5e2e5; border-radius: 6px; box-shadow: 0 2px 8px #1238491a; }
 #colour-settings:not([open]) { width: auto; }
 #colour-settings summary { cursor: pointer; padding: 10px 12px; font-weight: 600; }

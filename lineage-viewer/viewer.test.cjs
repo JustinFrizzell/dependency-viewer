@@ -51,10 +51,10 @@ test('built demo embeds the demo dataset and displays its graph', () => {
     assert.ok(document.querySelector('#graph canvas'));
     assert.match(document.getElementById('graph-summary').textContent, /workspace\.lakehouse\.bronze_raw\.orders/);
     const result = [...document.querySelectorAll('#table-results button')]
-      .find(button => button.title === 'workspace.report.commerce_pulse');
+      .find(button => button.title === 'workspace1.report.commerce_pulse');
     assert.ok(result);
     result.click();
-    assert.equal(document.querySelector('#selection-status h2').textContent, 'workspace.report.commerce_pulse');
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'workspace1.report.commerce_pulse');
   } finally { dom.window.close(); }
 });
 

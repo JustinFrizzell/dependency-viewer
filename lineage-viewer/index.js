@@ -235,7 +235,6 @@ function showGraph(data) {
   const updateZoom = () => { zoomLevel.textContent = `${Math.round(graph.zoom() * 100)}%`; };
   graph.on('zoom', updateZoom);
   updateZoom();
-  document.getElementById('legend').hidden = false;
   document.querySelector('.controls').hidden = false;
   setupEdgeMotion(window, document, graph, document.getElementById('edge-motion'));
   document.getElementById('fit').addEventListener('click', () => {
