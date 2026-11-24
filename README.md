@@ -21,4 +21,6 @@ npm test
 
 This builds the viewer and runs the automated viewer tests.
 
-This project originated from [dbt Docs](https://github.com/dbt-labs/dbt-docs). The repository's [Apache 2.0 license](LICENSE) and historical changelog are retained. The former CI sample was derived from [jaffle_shop](https://github.com/dbt-labs/jaffle_shop); its [license](ci-project/LICENSE) is retained.
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE). It originated from [dbt Docs](https://github.com/dbt-labs/dbt-docs); a former CI sample was derived from [jaffle_shop](https://github.com/dbt-labs/jaffle_shop). The standalone viewer includes third-party software; its license notices are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) and embedded in the generated HTML. Update those notices when bundled dependencies change.

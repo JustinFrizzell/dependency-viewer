@@ -57,6 +57,12 @@ test('built viewer starts empty and has no external resources', () => {
   dom.window.close();
 });
 
+test('built viewer includes its project license and third-party notices', () => {
+  const html = template();
+  assert.ok(html.includes(fs.readFileSync('LICENSE', 'utf8')));
+  assert.ok(html.includes(fs.readFileSync('THIRD_PARTY_NOTICES.txt', 'utf8')));
+});
+
 function dataset(value) {
   return { raw: JSON.stringify(value) };
 }
