@@ -1,10 +1,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { parseDependency } = require('./data');
+const { parseDependency } = require('../src/data');
 
 test('demo revenue report connects to the documented daily revenue entity', () => {
-  const graph = parseDependency(fs.readFileSync('dependency-viewer/demo_data.json', 'utf8'));
+  const graph = parseDependency(fs.readFileSync('dependency-viewer/test/fixtures/demo_data.json', 'utf8'));
   const name = 'workspace1.lakehouse.gold_mart.daily_revenue';
   const entity = graph.entities.find(item => item.name === name);
   assert.equal(entity.documented, true);

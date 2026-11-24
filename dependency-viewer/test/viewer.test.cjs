@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { JSDOM } = require('jsdom');
-const { parseDependency } = require('./data');
+const { parseDependency } = require('../src/data');
 
 const template = () => fs.readFileSync('dist/dependency-viewer.html', 'utf8');
 
@@ -749,7 +749,7 @@ test('loading retains Unicode and markup-like names without creating elements', 
 });
 
 test('generated acceptance files support representative search and dependency navigation', () => {
-  execFileSync(process.execPath, ['dependency-viewer/acceptance-fixtures.cjs']);
+  execFileSync(process.execPath, ['dependency-viewer/test/acceptance-fixtures.cjs']);
   const dom = open({ raw: fs.readFileSync('dist/dependency-acceptance.json', 'utf8') });
   try {
     const document = dom.window.document;

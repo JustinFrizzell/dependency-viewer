@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { JSDOM } = require('jsdom');
 const cytoscape = require('cytoscape');
-const { setupColourSettings } = require('./colour-settings');
+const { setupColourSettings } = require('../src/colour-settings');
 
 function open(t) {
-  const dom = new JSDOM(fs.readFileSync('dependency-viewer/index.html', 'utf8'));
+  const dom = new JSDOM(fs.readFileSync('dependency-viewer/src/index.html', 'utf8'));
   const graph = cytoscape({
     headless: true,
     styleEnabled: true,

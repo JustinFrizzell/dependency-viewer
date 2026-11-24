@@ -7,7 +7,7 @@ const TerserPlugin = require('terser-webpack-plugin');
 module.exports = {
   mode: 'production',
   devtool: false,
-  entry: path.resolve(__dirname, 'index.js'),
+  entry: path.resolve(__dirname, 'src/index.js'),
   output: { path: path.resolve(__dirname, '../dist'), filename: 'dependency-viewer.js' },
   optimization: {
     minimizer: [new TerserPlugin({
@@ -18,7 +18,7 @@ module.exports = {
   performance: false,
   plugins: [
     new HtmlWebpackPlugin({
-      template: path.resolve(__dirname, 'index.html'),
+      template: path.resolve(__dirname, 'src/index.html'),
       filename: 'dependency-viewer.html',
       inject: 'body',
       minify: false,

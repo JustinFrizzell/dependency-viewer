@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { dependencyEdgeStyle } = require('./edge-style');
+const { dependencyEdgeStyle } = require('../src/edge-style');
 
 test('taxi edges follow the actual horizontal source-to-target direction', () => {
   assert.equal(dependencyEdgeStyle['curve-style'], 'taxi');

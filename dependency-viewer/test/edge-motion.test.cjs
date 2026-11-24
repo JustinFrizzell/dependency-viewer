@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { setupEdgeMotion } = require('./edge-motion');
+const { setupEdgeMotion } = require('../src/edge-motion');
 
 class FakeButton {
   constructor() {

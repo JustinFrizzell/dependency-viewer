@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
-const { setupImageExport } = require('./export-image');
+const { setupImageExport } = require('../src/export-image');
 
 function setup() {
   const dom = new JSDOM(`<select id="export-resolution"><option value="1">1</option><option value="2" selected>2</option><option value="4">4</option></select>

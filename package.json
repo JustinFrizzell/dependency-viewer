@@ -3,8 +3,7 @@
     "build": "npm run build:dependency",
     "test": "npm run test:dependency",
     "build:dependency": "webpack --config dependency-viewer/webpack.config.js",
-    "prototype:dependency": "npm run build:dependency && node dependency-viewer/prototype-server.cjs",
-    "test:dependency": "npm run build:dependency && node --test dependency-viewer/*.test.cjs"
+    "test:dependency": "npm run build:dependency && node --test dependency-viewer/test/*.test.cjs"
   },
   "devDependencies": {
     "css-loader": "^6.8.1",
