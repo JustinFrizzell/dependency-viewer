@@ -1,11 +1,14 @@
-# Lineage viewer
+# Dependency viewer
 
-The language used to describe table-level lineage in the viewer.
+The language used to describe entities and their dependencies.
 
 ## Language
 
-**Table**:
-A named data asset represented in the lineage.
+**Entity**:
+An identifiable thing represented in the dependency graph, such as a table, process, person, or place.
 
-**Input table**:
-A table directly used to produce another table.
+**Dependency**:
+An entity that another entity requires or relies on.
+
+**Direct dependency**:
+A dependency that an entity relies on directly, rather than through another entity.

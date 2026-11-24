@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { JSDOM } = require('jsdom');
 
-const template = () => fs.readFileSync('dist/lineage-viewer.html', 'utf8');
+const template = () => fs.readFileSync('dist/dependency-viewer.html', 'utf8');
 
 function open(html, drawnText = []) {
   return new JSDOM(html, {
@@ -29,28 +29,28 @@ function open(html, drawnText = []) {
 
 test('built template has one injection point and explains missing data', () => {
   const html = template();
-  assert.equal(html.split('__LINEAGE_DATA_JSON__').length - 1, 1);
+  assert.equal(html.split('__DEPENDENCY_DATA_JSON__').length - 1, 1);
   const dom = open(html);
-  const marker = dom.window.document.getElementById('lineage-data');
+  const marker = dom.window.document.getElementById('dependency-data');
   assert.equal(marker.type, 'application/json');
-  assert.equal(marker.textContent, '__LINEAGE_DATA_JSON__');
+  assert.equal(marker.textContent, '__DEPENDENCY_DATA_JSON__');
   assert.equal(dom.window.document.querySelectorAll('script[src], link[href], img[src], iframe[src]').length, 0);
-  assert.match(dom.window.document.body.textContent, /lineage data has not been embedded/i);
+  assert.match(dom.window.document.body.textContent, /dependency data has not been embedded/i);
   dom.window.close();
 });
 
 test('built demo embeds the demo dataset and displays its graph', () => {
-  const html = fs.readFileSync('dist/lineage-demo.html', 'utf8');
-  const expected = JSON.parse(fs.readFileSync('lineage-viewer/demo_data.json', 'utf8'));
+  const html = fs.readFileSync('dist/dependency-demo.html', 'utf8');
+  const expected = JSON.parse(fs.readFileSync('dependency-viewer/demo_data.json', 'utf8'));
   const dom = open(html);
   try {
     const document = dom.window.document;
-    assert.deepEqual(JSON.parse(document.getElementById('lineage-data').textContent), expected);
+    assert.deepEqual(JSON.parse(document.getElementById('dependency-data').textContent), expected);
     assert.equal(document.querySelectorAll('script[src], link[href], img[src], iframe[src]').length, 0);
     assert.equal(document.getElementById('status').textContent, '');
     assert.ok(document.querySelector('#graph canvas'));
     assert.match(document.getElementById('graph-summary').textContent, /workspace\.lakehouse\.bronze_raw\.orders/);
-    const result = [...document.querySelectorAll('#table-results button')]
+    const result = [...document.querySelectorAll('#entity-results button')]
       .find(button => button.title === 'workspace1.report.commerce_pulse');
     assert.ok(result);
     result.click();
@@ -60,7 +60,7 @@ test('built demo embeds the demo dataset and displays its graph', () => {
 
 function injected(value) {
   const json = JSON.stringify(value).replace(/</g, '\\u003c');
-  return template().replace('__LINEAGE_DATA_JSON__', json);
+  return template().replace('__DEPENDENCY_DATA_JSON__', json);
 }
 
 function clickGraph(dom, x, y) {
@@ -74,9 +74,9 @@ function clickGraph(dom, x, y) {
   }
 }
 
-test('table details can be collapsed while selection continues to update', () => {
-  const dom = open(injected({ tables: [
-    { name: 'first', inputs: [] }, { name: 'second', inputs: ['first'] },
+test('entity details can be collapsed while selection continues to update', () => {
+  const dom = open(injected({ entities: [
+    { name: 'first', dependencies: [] }, { name: 'second', dependencies: ['first'] },
   ] }));
   try {
     const document = dom.window.document;
@@ -85,7 +85,7 @@ test('table details can be collapsed while selection continues to update', () =>
     assert.equal(inspector.open, true);
     summary.click();
     assert.equal(inspector.open, false);
-    [...document.querySelectorAll('#table-results button')].find(button => button.title === 'second').click();
+    [...document.querySelectorAll('#entity-results button')].find(button => button.title === 'second').click();
     assert.equal(inspector.open, false);
     assert.equal(document.querySelector('#selection-status h2').textContent, 'second');
     summary.click();
@@ -94,17 +94,17 @@ test('table details can be collapsed while selection continues to update', () =>
   } finally { dom.window.close(); }
 });
 
-test('lineage views require a selection and focus transitively in each direction', () => {
-  const dom = open(injected({ tables: [
-    { name: 'a', inputs: [] }, { name: 'b', inputs: ['a'] },
-    { name: 'c', inputs: ['b'] }, { name: 'd', inputs: ['c'] },
-    { name: 'e', inputs: ['d'] }, { name: 'focus', inputs: ['e', 'branch'] },
-    { name: 'branch', inputs: [] }, { name: 'child', inputs: ['focus'] },
-    { name: 'other', inputs: [] },
+test('dependency views require a selection and focus transitively in each direction', () => {
+  const dom = open(injected({ entities: [
+    { name: 'a', dependencies: [] }, { name: 'b', dependencies: ['a'] },
+    { name: 'c', dependencies: ['b'] }, { name: 'd', dependencies: ['c'] },
+    { name: 'e', dependencies: ['d'] }, { name: 'focus', dependencies: ['e', 'branch'] },
+    { name: 'branch', dependencies: [] }, { name: 'child', dependencies: ['focus'] },
+    { name: 'other', dependencies: [] },
   ] }));
   try {
     const document = dom.window.document;
-    const button = name => [...document.querySelectorAll('#lineage-views button')].find(item => item.textContent === name);
+    const button = name => [...document.querySelectorAll('#dependency-views button')].find(item => item.textContent === name);
     const summary = () => document.getElementById('graph-summary').textContent;
     assert.ok(button('Connected').disabled);
     assert.ok(button('Upstream').disabled);
@@ -127,14 +127,14 @@ test('lineage views require a selection and focus transitively in each direction
     }
     assert.equal(button('Upstream').disabled, false);
     button('Upstream').click();
-    assert.match(summary(), /Tables: a, b, c, d, e, focus, branch/);
+    assert.match(summary(), /Entities: a, b, c, d, e, focus, branch/);
     assert.doesNotMatch(summary(), /child|other/);
     assert.equal(button('Upstream').getAttribute('aria-pressed'), 'true');
     button('Downstream').click();
-    assert.match(summary(), /Tables: focus, child/);
+    assert.match(summary(), /Entities: focus, child/);
     assert.doesNotMatch(summary(), /branch|other|a →/);
     button('Connected').click();
-    assert.match(summary(), /Tables: a, b, c, d, e, focus, branch, child/);
+    assert.match(summary(), /Entities: a, b, c, d, e, focus, branch, child/);
     assert.doesNotMatch(summary(), /other/);
     button('All').click();
     assert.match(summary(), /other/);
@@ -143,9 +143,9 @@ test('lineage views require a selection and focus transitively in each direction
 });
 
 test('changing selection refocuses and fits the active view and All fits without clearing it', () => {
-  const dom = open(injected({ tables: [
-    { name: 'input', inputs: [] }, { name: 'middle', inputs: ['input'] },
-    { name: 'output', inputs: ['middle'] },
+  const dom = open(injected({ entities: [
+    { name: 'input', dependencies: [] }, { name: 'middle', dependencies: ['input'] },
+    { name: 'output', dependencies: ['middle'] },
   ] }));
   try {
     const document = dom.window.document;
@@ -156,12 +156,12 @@ test('changing selection refocuses and fits the active view and All fits without
     clickGraph(dom, 500, 300);
     assert.equal(inspector.querySelector('h2').textContent, 'middle');
     view('upstream').click();
-    assert.match(summary.textContent, /Tables: input, middle/);
+    assert.match(summary.textContent, /Entities: input, middle/);
     document.getElementById('zoom-in').click();
     const zoomBeforeNavigation = zoom.textContent;
     [...inspector.querySelectorAll('button')].find(item => item.textContent === 'output').click();
     assert.equal(inspector.querySelector('h2').textContent, 'output');
-    assert.match(summary.textContent, /Tables: input, middle, output/);
+    assert.match(summary.textContent, /Entities: input, middle, output/);
     assert.notEqual(zoom.textContent, zoomBeforeNavigation);
     document.getElementById('zoom-in').click();
     const zoomBeforeAll = zoom.textContent;
@@ -172,21 +172,21 @@ test('changing selection refocuses and fits the active view and All fits without
   } finally { dom.window.close(); }
 });
 
-test('searching for another table refocuses, fits, and centers the active lineage view', () => {
-  const dom = open(injected({ tables: [
-    { name: 'input', inputs: [] }, { name: 'middle', inputs: ['input'] },
-    { name: 'output', inputs: ['middle'] }, { name: 'isolated', inputs: [] },
+test('searching for another entity refocuses, fits, and centers the active dependency view', () => {
+  const dom = open(injected({ entities: [
+    { name: 'input', dependencies: [] }, { name: 'middle', dependencies: ['input'] },
+    { name: 'output', dependencies: ['middle'] }, { name: 'isolated', dependencies: [] },
   ] }));
   try {
     const document = dom.window.document;
-    const result = name => [...document.querySelectorAll('#table-results button')].find(button => button.textContent === name);
+    const result = name => [...document.querySelectorAll('#entity-results button')].find(button => button.textContent === name);
     result('middle').click();
     document.querySelector('[data-view="upstream"]').click();
     document.getElementById('zoom-in').click();
     const zoom = document.getElementById('zoom-level').textContent;
     result('output').click();
     assert.equal(document.querySelector('#selection-status h2').textContent, 'output');
-    assert.match(document.getElementById('graph-summary').textContent, /Tables: input, middle, output/);
+    assert.match(document.getElementById('graph-summary').textContent, /Entities: input, middle, output/);
     assert.doesNotMatch(document.getElementById('graph-summary').textContent, /isolated/);
     assert.notEqual(document.getElementById('zoom-level').textContent, zoom);
     clickGraph(dom, 500, 300);
@@ -194,15 +194,15 @@ test('searching for another table refocuses, fits, and centers the active lineag
   } finally { dom.window.close(); }
 });
 
-test('filtered search centers an endpoint while keeping its multi-hop lineage on canvas', () => {
-  const dom = open(injected({ tables: [
-    { name: 'a', inputs: [] }, { name: 'b', inputs: ['a'] },
-    { name: 'c', inputs: ['b'] }, { name: 'd', inputs: ['c'] },
-    { name: 'e', inputs: ['d'] }, { name: 'isolated', inputs: [] },
+test('filtered search centers an endpoint while keeping its multi-hop dependency on canvas', () => {
+  const dom = open(injected({ entities: [
+    { name: 'a', dependencies: [] }, { name: 'b', dependencies: ['a'] },
+    { name: 'c', dependencies: ['b'] }, { name: 'd', dependencies: ['c'] },
+    { name: 'e', dependencies: ['d'] }, { name: 'isolated', dependencies: [] },
   ] }));
   try {
     const document = dom.window.document;
-    const result = name => [...document.querySelectorAll('#table-results button')].find(button => button.textContent === name);
+    const result = name => [...document.querySelectorAll('#entity-results button')].find(button => button.textContent === name);
     const selected = () => document.querySelector('#selection-status h2').textContent;
     result('d').click();
     document.querySelector('[data-view="upstream"]').click();
@@ -216,23 +216,23 @@ test('filtered search centers an endpoint while keeping its multi-hop lineage on
     for (let x = 1; x < 1000; x += 10) seen.add(hit(x, 300));
     for (const name of ['a', 'b', 'c', 'd', 'e']) assert.ok(seen.has(name), `${name} is on canvas`);
     for (const [x, y] of [[1, 300], [999, 300], [500, 1], [500, 599]]) {
-      assert.equal(hit(x, y), 'e', 'lineage does not touch the canvas boundary');
+      assert.equal(hit(x, y), 'e', 'dependency does not touch the canvas boundary');
     }
-    assert.match(document.getElementById('graph-summary').textContent, /Tables: a, b, c, d, e/);
+    assert.match(document.getElementById('graph-summary').textContent, /Entities: a, b, c, d, e/);
     assert.doesNotMatch(document.getElementById('graph-summary').textContent, /isolated/);
   } finally { dom.window.close(); }
 });
 
-test('table search matches full names case-insensitively without merging identities', () => {
-  const dom = open(injected({ tables: [
-    { name: 'DB.Raw.Orders', inputs: ['external.Source'] },
-    { name: 'db.raw.orders', inputs: [] },
-    { name: 'other', inputs: [] },
+test('entity search matches full names case-insensitively without merging identities', () => {
+  const dom = open(injected({ entities: [
+    { name: 'DB.Raw.Orders', dependencies: ['external.Source'] },
+    { name: 'db.raw.orders', dependencies: [] },
+    { name: 'other', dependencies: [] },
   ] }));
   try {
     const document = dom.window.document;
-    const search = document.getElementById('table-search');
-    const results = document.getElementById('table-results');
+    const search = document.getElementById('entity-search');
+    const results = document.getElementById('entity-results');
     const searchFor = value => {
       search.value = value;
       search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
@@ -244,18 +244,18 @@ test('table search matches full names case-insensitively without merging identit
     assert.deepEqual(resultNames(), ['external.Source (undocumented)']);
     searchFor('not present');
     assert.equal(resultNames().length, 0);
-    assert.match(document.getElementById('table-search-status').textContent, /no matching tables/i);
+    assert.match(document.getElementById('entity-search-status').textContent, /no matching entities/i);
     searchFor('');
     assert.equal(resultNames().length, 4);
   } finally { dom.window.close(); }
 });
 
-test('graph name filter intersects lineage views and hides edges to nonmatching tables', () => {
-  const dom = open(injected({ tables: [
-    { name: 'DB.Raw.Orders', inputs: [] },
-    { name: 'db.mart.orders', inputs: ['DB.Raw.Orders'] },
-    { name: 'db.mart.customers', inputs: ['db.mart.orders'] },
-    { name: 'other.orders', inputs: [] },
+test('graph name filter intersects dependency views and hides edges to nonmatching entities', () => {
+  const dom = open(injected({ entities: [
+    { name: 'DB.Raw.Orders', dependencies: [] },
+    { name: 'db.mart.orders', dependencies: ['DB.Raw.Orders'] },
+    { name: 'db.mart.customers', dependencies: ['db.mart.orders'] },
+    { name: 'other.orders', dependencies: [] },
   ] }));
   try {
     const document = dom.window.document;
@@ -266,33 +266,33 @@ test('graph name filter intersects lineage views and hides edges to nonmatching 
       filter.value = value;
       filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     };
-    const result = name => [...document.querySelectorAll('#table-results button')].find(button => button.title === name);
+    const result = name => [...document.querySelectorAll('#entity-results button')].find(button => button.title === name);
     result('db.mart.orders').click();
     document.querySelector('[data-view="connected"]').click();
     setFilter('  ORDERS  ');
-    assert.match(summary.textContent, /Tables: DB\.Raw\.Orders, db\.mart\.orders/);
+    assert.match(summary.textContent, /Entities: DB\.Raw\.Orders, db\.mart\.orders/);
     assert.match(summary.textContent, /DB\.Raw\.Orders → db\.mart\.orders/);
     assert.doesNotMatch(summary.textContent, /customers|other\.orders/);
-    assert.equal(document.querySelectorAll('#table-results button').length, 4);
+    assert.equal(document.querySelectorAll('#entity-results button').length, 4);
     assert.equal(document.querySelector('#selection-status h2').textContent, 'db.mart.orders');
     document.querySelector('[data-view="downstream"]').click();
     assert.equal(filter.value, '  ORDERS  ');
-    assert.match(summary.textContent, /Tables: db\.mart\.ordersRelationships: none/);
+    assert.match(summary.textContent, /Entities: db\.mart\.ordersRelationships: none/);
     setFilter('customers');
-    assert.match(summary.textContent, /Tables: db\.mart\.customersRelationships: none/);
+    assert.match(summary.textContent, /Entities: db\.mart\.customersRelationships: none/);
     assert.equal(document.querySelector('#selection-status h2').textContent, 'db.mart.orders');
     document.querySelector('[data-view="upstream"]').click();
-    assert.equal(status.textContent, 'No matching tables.');
+    assert.equal(status.textContent, 'No matching entities.');
     document.getElementById('fit').click();
     setFilter('   ');
     assert.equal(status.textContent, '');
-    assert.match(summary.textContent, /Tables: DB\.Raw\.Orders, db\.mart\.orders/);
+    assert.match(summary.textContent, /Entities: DB\.Raw\.Orders, db\.mart\.orders/);
   } finally { dom.window.close(); }
 });
 
-test('selecting a nonmatching table clears the graph filter from either navigation panel', () => {
-  const dom = open(injected({ tables: [
-    { name: 'input', inputs: [] }, { name: 'output', inputs: ['input'] },
+test('selecting a nonmatching entity clears the graph filter from either navigation panel', () => {
+  const dom = open(injected({ entities: [
+    { name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] },
   ] }));
   try {
     const document = dom.window.document;
@@ -301,14 +301,14 @@ test('selecting a nonmatching table clears the graph filter from either navigati
       filter.value = value;
       filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     };
-    const result = name => [...document.querySelectorAll('#table-results button')].find(button => button.title === name);
+    const result = name => [...document.querySelectorAll('#entity-results button')].find(button => button.title === name);
     setFilter('input');
     result('output').click();
     assert.equal(filter.value, '');
     assert.equal(document.querySelector('#selection-status h2').textContent, 'output');
     assert.match(document.getElementById('graph-summary').textContent, /input → output/);
     setFilter('output');
-    document.querySelector('#selection-status .related-table').click();
+    document.querySelector('#selection-status .related-entity').click();
     assert.equal(filter.value, '');
     assert.equal(document.querySelector('#selection-status h2').textContent, 'input');
     assert.match(document.getElementById('graph-summary').textContent, /input → output/);
@@ -318,10 +318,10 @@ test('selecting a nonmatching table clears the graph filter from either navigati
   } finally { dom.window.close(); }
 });
 
-test('filtering fits the matching graph node and leaves zoom unchanged when no tables match', () => {
-  const dom = open(injected({ tables: [
-    { name: 'first', inputs: [] }, { name: 'second', inputs: ['first'] },
-    { name: 'third', inputs: ['second'] },
+test('filtering fits the matching graph node and leaves zoom unchanged when no entities match', () => {
+  const dom = open(injected({ entities: [
+    { name: 'first', dependencies: [] }, { name: 'second', dependencies: ['first'] },
+    { name: 'third', dependencies: ['second'] },
   ] }));
   try {
     const document = dom.window.document;
@@ -339,23 +339,23 @@ test('filtering fits the matching graph node and leaves zoom unchanged when no t
     assert.equal(document.querySelector('#selection-status h2').textContent, 'third');
     setFilter('absent');
     assert.equal(document.getElementById('zoom-level').textContent, fitted);
-    assert.equal(document.getElementById('graph-filter-status').textContent, 'No matching tables.');
+    assert.equal(document.getElementById('graph-filter-status').textContent, 'No matching entities.');
   } finally { dom.window.close(); }
 });
 
-test('selecting a search result opens its details and centers that exact table', () => {
-  const dom = open(injected({ tables: [
-    { name: 'DB.Raw', inputs: ['missing'], description: 'Uppercase table' },
-    { name: 'db.raw', inputs: [], description: 'Lowercase table' },
+test('selecting a search result opens its details and centers that exact entity', () => {
+  const dom = open(injected({ entities: [
+    { name: 'DB.Raw', dependencies: ['missing'], description: 'Uppercase entity' },
+    { name: 'db.raw', dependencies: [], description: 'Lowercase entity' },
   ] }));
   try {
     const document = dom.window.document;
     const inspector = document.getElementById('selection-status');
-    const buttons = [...document.querySelectorAll('#table-results button')];
+    const buttons = [...document.querySelectorAll('#entity-results button')];
     document.getElementById('zoom-in').click();
     const zoom = document.getElementById('zoom-level').textContent;
     for (const [name, description] of [
-      ['db.raw', 'Lowercase table'], ['DB.Raw', 'Uppercase table'], ['missing (undocumented)', 'Unknown'],
+      ['db.raw', 'Lowercase entity'], ['DB.Raw', 'Uppercase entity'], ['missing (undocumented)', 'Unknown'],
     ]) {
       buttons.find(button => button.title === name).click();
       assert.equal(inspector.querySelector('h2').textContent, name.replace(' (undocumented)', ''));
@@ -367,13 +367,13 @@ test('selecting a search result opens its details and centers that exact table',
   } finally { dom.window.close(); }
 });
 
-test('qualified table labels stay short while preserving distinct identities and full names', async () => {
+test('qualified entity labels stay short while preserving distinct identities and full names', async () => {
   const drawnText = [];
   const longName = 'a_very_long_table_name_that_will_not_fit_in_the_node';
-  const dom = open(injected({ tables: [
-    { name: 'sales.orders', inputs: [] },
-    { name: 'support.orders', inputs: ['sales.orders'] },
-    { name: `warehouse.schema.${longName}`, inputs: [] },
+  const dom = open(injected({ entities: [
+    { name: 'sales.orders', dependencies: [] },
+    { name: 'support.orders', dependencies: ['sales.orders'] },
+    { name: `warehouse.schema.${longName}`, dependencies: [] },
   ] }), drawnText);
   try {
     const document = dom.window.document;
@@ -381,10 +381,10 @@ test('qualified table labels stay short while preserving distinct identities and
     assert.ok(drawnText.includes('orders'));
     assert.ok(drawnText.some(text => text.endsWith('…') && longName.startsWith(text.slice(0, -1))));
     assert.ok(!drawnText.includes('sales.orders'));
-    const results = [...document.querySelectorAll('#table-results button')];
-    assert.deepEqual(results.map(button => button.querySelector('.table-result-name').textContent),
+    const results = [...document.querySelectorAll('#entity-results button')];
+    assert.deepEqual(results.map(button => button.querySelector('.entity-result-name').textContent),
       ['orders', 'orders', longName]);
-    assert.deepEqual(results.map(button => button.querySelector('.table-result-prefix').textContent),
+    assert.deepEqual(results.map(button => button.querySelector('.entity-result-prefix').textContent),
       ['sales', 'support', 'warehouse.schema']);
     assert.equal(results[1].getAttribute('aria-label'), 'support.orders');
     assert.equal(results[1].title, 'support.orders');
@@ -397,12 +397,12 @@ test('qualified table labels stay short while preserving distinct identities and
   } finally { dom.window.close(); }
 });
 
-test('table list can be collapsed and reopened without losing the search', () => {
-  const dom = open(injected({ tables: [{ name: 'orders', inputs: [] }, { name: 'customers', inputs: [] }] }));
+test('entity list can be collapsed and reopened without losing the search', () => {
+  const dom = open(injected({ entities: [{ name: 'orders', dependencies: [] }, { name: 'customers', dependencies: [] }] }));
   try {
     const document = dom.window.document;
-    const list = document.getElementById('table-list');
-    const search = document.getElementById('table-search');
+    const list = document.getElementById('entity-list');
+    const search = document.getElementById('entity-search');
     search.value = 'orders';
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     assert.equal(list.open, true);
@@ -411,16 +411,16 @@ test('table list can be collapsed and reopened without losing the search', () =>
     list.querySelector('summary').click();
     assert.equal(list.open, true);
     assert.equal(search.value, 'orders');
-    assert.deepEqual([...document.querySelectorAll('#table-results button')].map(button => button.textContent), ['orders']);
+    assert.deepEqual([...document.querySelectorAll('#entity-results button')].map(button => button.textContent), ['orders']);
   } finally { dom.window.close(); }
 });
 
-test('selecting a graph table opens its inspector without changing the view', () => {
-  const dom = open(injected({ tables: [{ name: 'warehouse.orders', inputs: [], description: 'Order facts' }] }));
+test('selecting a graph entity opens its inspector without changing the view', () => {
+  const dom = open(injected({ entities: [{ name: 'warehouse.orders', dependencies: [], description: 'Order facts' }] }));
   try {
     const document = dom.window.document;
     const inspector = document.getElementById('selection-status');
-    assert.match(inspector.textContent, /select.*table/i);
+    assert.match(inspector.textContent, /select.*entity/i);
     const graph = document.getElementById('graph');
     const canvas = graph.querySelector('canvas');
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
@@ -439,16 +439,16 @@ test('selecting a graph table opens its inspector without changing the view', ()
 test('inspector displays ordered extra properties as safe text beneath a missing description', () => {
   const hostileKey = '<img src=x onerror="window.injectedMarkupRan=true">';
   const hostileValue = '</script><script>window.injectedMarkupRan=true</script>\n東京';
-  const table = JSON.parse(`{"name":"sales","inputs":["missing"],"z":"plain text","10":10,"2":2,"documented":false,"empty":"","nil":null,"flag":true,"array":[1,"two"],"object":{"nested":[false,null]},"__proto__":"safe"}`);
-  table[hostileKey] = hostileValue;
-  const dom = open(injected({ tables: [table, { name: 'report', inputs: ['sales'] }] }));
+  const entity = JSON.parse(`{"name":"sales","dependencies":["missing"],"z":"plain text","10":10,"2":2,"documented":false,"empty":"","nil":null,"flag":true,"array":[1,"two"],"object":{"nested":[false,null]},"__proto__":"safe"}`);
+  entity[hostileKey] = hostileValue;
+  const dom = open(injected({ entities: [entity, { name: 'report', dependencies: ['sales'] }] }));
   try {
     const document = dom.window.document;
     const inspector = document.getElementById('selection-status');
-    [...document.querySelectorAll('#table-results button')].find(button => button.title === 'sales').click();
+    [...document.querySelectorAll('#entity-results button')].find(button => button.title === 'sales').click();
     const description = inspector.querySelector('.inspector-details > section');
     assert.equal(description.querySelector('p').textContent, 'No description provided.');
-    const extras = description.querySelector('.table-extras');
+    const extras = description.querySelector('.entity-extras');
     assert.deepEqual([...extras.children].map(element => [element.tagName, element.textContent]), [
       ['DT', '2'], ['DD', '2'], ['DT', '10'], ['DD', '10'],
       ['DT', 'z'], ['DD', 'plain text'], ['DT', 'documented'], ['DD', 'false'],
@@ -465,20 +465,20 @@ test('inspector displays ordered extra properties as safe text beneath a missing
     assert.ok(related('report'));
     related('missing').click();
     assert.match(inspector.textContent, /description.*unknown/i);
-    assert.match(inspector.textContent, /inputs.*unknown/i);
-    assert.equal(inspector.querySelector('.table-extras'), null);
+    assert.match(inspector.textContent, /dependencies.*unknown/i);
+    assert.equal(inspector.querySelector('.entity-extras'), null);
     related('sales').click();
-    assert.equal(inspector.querySelector('.table-extras').lastElementChild.textContent, hostileValue);
+    assert.equal(inspector.querySelector('.entity-extras').lastElementChild.textContent, hostileValue);
     related('report').click();
-    assert.equal(inspector.querySelector('.table-extras'), null);
+    assert.equal(inspector.querySelector('.entity-extras'), null);
   } finally { dom.window.close(); }
 });
 
-test('inspector navigates direct relationships and identifies undocumented inputs', () => {
+test('inspector navigates direct relationships and identifies undocumented dependencies', () => {
   const description = 'Sales "quoted" 東京 </script><img src=x onerror=alert(1)>';
-  const dom = open(injected({ tables: [
-    { name: 'sales', inputs: ['missing', 'missing'], description },
-    { name: 'report', inputs: ['sales'] },
+  const dom = open(injected({ entities: [
+    { name: 'sales', dependencies: ['missing', 'missing'], description },
+    { name: 'report', dependencies: ['sales'] },
   ] }));
   try {
     const document = dom.window.document;
@@ -488,17 +488,17 @@ test('inspector navigates direct relationships and identifies undocumented input
     assert.equal(inspector.querySelectorAll('img').length, 0);
     const related = name => [...inspector.querySelectorAll('button')].find(button => button.textContent.includes(name));
     const section = name => [...inspector.querySelectorAll('section')].find(item => item.querySelector('h3').textContent === name);
-    assert.match(section('Direct inputs').textContent, /missing.*undocumented/i);
-    assert.doesNotMatch(section('Direct inputs').textContent, /report/);
-    assert.match(section('Direct downstream tables').textContent, /report/);
-    assert.doesNotMatch(section('Direct downstream tables').textContent, /missing/);
+    assert.match(section('Direct dependencies').textContent, /missing.*undocumented/i);
+    assert.doesNotMatch(section('Direct dependencies').textContent, /report/);
+    assert.match(section('Direct downstream entities').textContent, /report/);
+    assert.doesNotMatch(section('Direct downstream entities').textContent, /missing/);
     assert.equal([...inspector.querySelectorAll('button')].filter(button => button.textContent.includes('missing')).length, 1);
     assert.ok(related('report'));
     related('missing').click();
     assert.match(inspector.textContent, /missing/);
     assert.match(inspector.textContent, /undocumented/i);
     assert.match(inspector.textContent, /description.*unknown/i);
-    assert.match(inspector.textContent, /inputs.*unknown/i);
+    assert.match(inspector.textContent, /dependencies.*unknown/i);
     related('sales').click();
     assert.ok(inspector.textContent.includes(description));
     related('report').click();
@@ -509,29 +509,29 @@ test('inspector navigates direct relationships and identifies undocumented input
   } finally { dom.window.close(); }
 });
 
-test('empty lineage has an informative empty state', () => {
-  const dom = open(injected({ tables: [] }));
-  assert.match(dom.window.document.getElementById('status').textContent, /no tables/i);
+test('empty dependency has an informative empty state', () => {
+  const dom = open(injected({ entities: [] }));
+  assert.match(dom.window.document.getElementById('status').textContent, /no entities/i);
   dom.window.close();
 });
 
-test('unusable embedded lineage displays an error', () => {
-  for (const html of [injected({ tables: [{ name: 'good', inputs: [] }, { name: 'bad', inputs: null }] }), template().replace('__LINEAGE_DATA_JSON__', '{invalid')]) {
+test('unusable embedded dependency displays an error', () => {
+  for (const html of [injected({ entities: [{ name: 'good', dependencies: [] }, { name: 'bad', dependencies: null }] }), template().replace('__DEPENDENCY_DATA_JSON__', '{invalid')]) {
     const dom = open(html);
     assert.match(dom.window.document.getElementById('status').textContent, /error/i);
     dom.window.close();
   }
 });
 
-test('cyclic and invalid table records show an error instead of a partial graph', () => {
+test('cyclic and invalid entity records show an error instead of a partial graph', () => {
   const invalid = [
-    { tables: [{ name: 'a', inputs: ['b'] }, { name: 'b', inputs: ['a'] }] },
-    { tables: [{ name: 'a', inputs: ['a'] }] },
-    { tables: [{ name: 'a', inputs: [] }, { name: 'a', inputs: [] }] },
-    { tables: [{ name: ' a', inputs: [] }] },
-    { tables: [{ name: 'a', inputs: [''] }] },
-    { tables: [{ name: 'a', inputs: [], description: null }] },
-    { tables: null },
+    { entities: [{ name: 'a', dependencies: ['b'] }, { name: 'b', dependencies: ['a'] }] },
+    { entities: [{ name: 'a', dependencies: ['a'] }] },
+    { entities: [{ name: 'a', dependencies: [] }, { name: 'a', dependencies: [] }] },
+    { entities: [{ name: ' a', dependencies: [] }] },
+    { entities: [{ name: 'a', dependencies: [''] }] },
+    { entities: [{ name: 'a', dependencies: [], description: null }] },
+    { entities: null },
   ];
   for (const data of invalid) {
     const dom = open(injected(data));
@@ -540,18 +540,18 @@ test('cyclic and invalid table records show an error instead of a partial graph'
   }
 });
 
-test('injected lineage exposes the complete directed graph without a selection', () => {
-  const dom = open(injected({ tables: [
-    { name: 'DB.Raw', inputs: [] },
-    { name: 'db.raw', inputs: ['DB.Raw', 'missing', 'missing'] },
-    { name: 'output', inputs: ['db.raw'] },
+test('injected dependency exposes the complete directed graph without a selection', () => {
+  const dom = open(injected({ entities: [
+    { name: 'DB.Raw', dependencies: [] },
+    { name: 'db.raw', dependencies: ['DB.Raw', 'missing', 'missing'] },
+    { name: 'output', dependencies: ['db.raw'] },
   ] }));
   const summary = dom.window.document.getElementById('graph-summary');
   assert.ok(summary);
   assert.match(summary.textContent, /DB.Raw → db.raw/);
   assert.equal(summary.textContent.split('missing → db.raw').length - 1, 1);
   assert.match(summary.textContent, /missing \(undocumented\)/);
-  assert.match(dom.window.document.getElementById('selection-status').textContent, /no table selected/i);
+  assert.match(dom.window.document.getElementById('selection-status').textContent, /no entity selected/i);
   assert.equal(dom.window.document.getElementById('status').textContent, '');
   assert.equal(dom.window.document.querySelector('.controls').hidden, false);
   assert.ok(dom.window.document.querySelector('#graph canvas'));
@@ -559,7 +559,7 @@ test('injected lineage exposes the complete directed graph without a selection',
 });
 
 test('zoom controls and reset change and restore the fitted view', () => {
-  const dom = open(injected({ tables: [{ name: 'input', inputs: [] }, { name: 'output', inputs: ['input'] }] }));
+  const dom = open(injected({ entities: [{ name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] }] }));
   try {
     const document = dom.window.document;
     const zoom = document.getElementById('zoom-level');
@@ -576,7 +576,7 @@ test('zoom controls and reset change and restore the fitted view', () => {
 });
 
 test('wheel zoom changes the graph view', () => {
-  const dom = open(injected({ tables: [{ name: 'input', inputs: [] }, { name: 'output', inputs: ['input'] }] }));
+  const dom = open(injected({ entities: [{ name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] }] }));
   try {
     const document = dom.window.document;
     const zoom = document.getElementById('zoom-level');
@@ -590,7 +590,7 @@ test('wheel zoom changes the graph view', () => {
 
 test('safe injection retains Unicode and markup-like names without creating elements', () => {
   const name = '東京 "quoted" </script><img src=x onerror=alert(1)>';
-  const dom = open(injected({ tables: [{ name, inputs: [], description: 'quote " and </script> é' }] }));
+  const dom = open(injected({ entities: [{ name, dependencies: [], description: 'quote " and </script> é' }] }));
   try {
     const document = dom.window.document;
     assert.equal(document.getElementById('status').textContent, '');
@@ -599,14 +599,14 @@ test('safe injection retains Unicode and markup-like names without creating elem
   } finally { dom.window.close(); }
 });
 
-test('generated acceptance files support representative search and lineage navigation', () => {
-  execFileSync(process.execPath, ['lineage-viewer/acceptance-fixtures.cjs']);
-  const dom = open(fs.readFileSync('dist/lineage-acceptance.html', 'utf8'));
+test('generated acceptance files support representative search and dependency navigation', () => {
+  execFileSync(process.execPath, ['dependency-viewer/acceptance-fixtures.cjs']);
+  const dom = open(fs.readFileSync('dist/dependency-acceptance.html', 'utf8'));
   try {
     const document = dom.window.document;
     assert.equal(document.getElementById('status').textContent, '');
-    const search = document.getElementById('table-search');
-    const results = document.getElementById('table-results');
+    const search = document.getElementById('entity-search');
+    const results = document.getElementById('entity-results');
     const inspector = document.getElementById('selection-status');
     const summary = document.getElementById('graph-summary');
     const searchFor = value => {
@@ -648,8 +648,8 @@ test('generated acceptance files support representative search and lineage navig
     assert.equal(inspector.querySelector('h2').textContent, 'missing');
   } finally { dom.window.close(); }
 
-  const empty = open(fs.readFileSync('dist/lineage-acceptance-empty.html', 'utf8'));
+  const empty = open(fs.readFileSync('dist/dependency-acceptance-empty.html', 'utf8'));
   try {
-    assert.match(empty.window.document.getElementById('status').textContent, /no tables/i);
+    assert.match(empty.window.document.getElementById('status').textContent, /no entities/i);
   } finally { empty.window.close(); }
 });

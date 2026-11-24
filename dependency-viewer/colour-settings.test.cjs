@@ -6,7 +6,7 @@ const cytoscape = require('cytoscape');
 const { setupColourSettings } = require('./colour-settings');
 
 function open(t) {
-  const dom = new JSDOM(fs.readFileSync('lineage-viewer/index.html', 'utf8'));
+  const dom = new JSDOM(fs.readFileSync('dependency-viewer/index.html', 'utf8'));
   const graph = cytoscape({
     headless: true,
     styleEnabled: true,

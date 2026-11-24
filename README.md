@@ -1,6 +1,6 @@
-# Lineage viewer
+# Dependency viewer
 
-Build a standalone HTML template for exploring table lineage without dbt artifacts.
+Build a standalone HTML template for exploring dependencies between entities, including data lineage, without dbt artifacts.
 
 ## Build the HTML template
 
@@ -11,7 +11,7 @@ npm ci
 npm run build
 ```
 
-The build writes a self-contained template to `dist/lineage-viewer.html` and a ready-to-open demo to `dist/lineage-demo.html`, populated from `lineage-viewer/demo_data.json`. The template contains the `__LINEAGE_DATA_JSON__` marker and must have lineage JSON injected before it displays a graph. See the [viewer guide](lineage-viewer/README.md) for the data format, safe injection details, and acceptance instructions.
+The build writes a self-contained template to `dist/dependency-viewer.html` and a ready-to-open demo to `dist/dependency-demo.html`, populated from `dependency-viewer/demo_data.json`. The template contains the `__DEPENDENCY_DATA_JSON__` marker and must have dependency JSON injected before it displays a graph. See the [viewer guide](dependency-viewer/README.md) for the data format, safe injection details, and acceptance instructions.
 
 ## Run tests
 

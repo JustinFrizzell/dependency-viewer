@@ -1,26 +1,26 @@
 require('./style.css');
 const cytoscape = require('cytoscape');
 const dagre = require('cytoscape-dagre');
-const { parseLineage } = require('./data');
+const { parseDependency } = require('./data');
 const { setupEdgeMotion } = require('./edge-motion');
-const { lineageEdgeStyle } = require('./edge-style');
+const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings } = require('./colour-settings');
 cytoscape.use(dagre);
 
 const status = document.getElementById('status');
-const embedded = document.getElementById('lineage-data').textContent.trim();
-if (embedded === ['__LINEAGE', 'DATA', 'JSON__'].join('_')) {
-  status.textContent = 'Lineage data has not been embedded in this template.';
+const embedded = document.getElementById('dependency-data').textContent.trim();
+if (embedded === ['__DEPENDENCY', 'DATA', 'JSON__'].join('_')) {
+  status.textContent = 'Dependency data has not been embedded in this template.';
 } else {
   try {
-    const data = parseLineage(embedded);
-    if (!data.tables.length) {
-      status.textContent = 'No tables in this lineage dataset.';
+    const data = parseDependency(embedded);
+    if (!data.entities.length) {
+      status.textContent = 'No entities in this dependency dataset.';
     } else {
       showGraph(data);
     }
   } catch (error) {
-    status.textContent = `Error: unusable lineage data. ${error.message}`;
+    status.textContent = `Error: unusable dependency data. ${error.message}`;
   }
 }
 
@@ -37,10 +37,10 @@ function showGraph(data) {
       ? { short: name, prefix: '' }
       : { short: name.slice(dot + 1), prefix: name.slice(0, dot) };
   }
-  const ids = new Map(data.tables.map((table, index) => [table.name, `table-${index}`]));
-  const elements = data.tables.map(table => ({
-    data: { id: ids.get(table.name), name: table.name, label: nameParts(table.name).short },
-    classes: table.documented ? '' : 'undocumented',
+  const ids = new Map(data.entities.map((entity, index) => [entity.name, `entity-${index}`]));
+  const elements = data.entities.map(entity => ({
+    data: { id: ids.get(entity.name), name: entity.name, label: nameParts(entity.name).short },
+    classes: entity.documented ? '' : 'undocumented',
   })).concat(data.edges.map((edge, index) => ({
     data: { id: `edge-${index}`, source: ids.get(edge.source), target: ids.get(edge.target) },
   })));
@@ -54,44 +54,44 @@ function showGraph(data) {
       { selector: 'node', style: { 'label': 'data(label)', 'shape': 'round-rectangle', 'width': 200, 'height': 54, 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2, 'color': '#204152', 'font-size': 12, 'text-wrap': 'ellipsis', 'text-max-width': 180, 'text-halign': 'center', 'text-valign': 'center' } },
       { selector: 'node.undocumented', style: { 'border-style': 'dashed', 'border-color': '#c08b3a', 'background-color': '#fff9ec' } },
       { selector: 'node.inspected', style: { 'border-color': '#168a80', 'border-width': 4 } },
-      { selector: 'edge', style: lineageEdgeStyle },
+      { selector: 'edge', style: dependencyEdgeStyle },
       { selector: '.filtered-out', style: { 'display': 'none' } },
     ],
     layout: { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80, fit: true, padding: 45, animate: false },
   });
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
   setupColourSettings(document, graph);
-  const tables = new Map(data.tables.map(table => [table.name, table]));
-  const downstream = new Map(data.tables.map(table => [table.name, []]));
+  const entities = new Map(data.entities.map(entity => [entity.name, entity]));
+  const downstream = new Map(data.entities.map(entity => [entity.name, []]));
   for (const edge of data.edges) downstream.get(edge.source).push(edge.target);
-  const search = document.getElementById('table-search');
-  const results = document.getElementById('table-results');
-  const searchStatus = document.getElementById('table-search-status');
+  const search = document.getElementById('entity-search');
+  const results = document.getElementById('entity-results');
+  const searchStatus = document.getElementById('entity-search-status');
   function updateResults() {
     const query = search.value.toLowerCase();
-    const matches = data.tables.filter(table => table.name.toLowerCase().includes(query));
+    const matches = data.entities.filter(entity => entity.name.toLowerCase().includes(query));
     results.replaceChildren();
-    for (const table of matches) {
+    for (const entity of matches) {
       const item = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
-      const { short, prefix } = nameParts(table.name);
-      const fullName = table.name + (table.documented ? '' : ' (undocumented)');
+      const { short, prefix } = nameParts(entity.name);
+      const fullName = entity.name + (entity.documented ? '' : ' (undocumented)');
       button.title = fullName;
       button.setAttribute('aria-label', fullName);
       const label = document.createElement('span');
-      label.className = 'table-result-name';
-      label.textContent = short + (table.documented ? '' : ' (undocumented)');
+      label.className = 'entity-result-name';
+      label.textContent = short + (entity.documented ? '' : ' (undocumented)');
       button.appendChild(label);
       if (prefix) {
         const detail = document.createElement('span');
-        detail.className = 'table-result-prefix';
+        detail.className = 'entity-result-prefix';
         detail.textContent = prefix;
         button.appendChild(detail);
       }
       button.addEventListener('click', () => {
-        selectTable(table.name);
-        const node = graph.getElementById(ids.get(table.name));
+        selectEntity(entity.name);
+        const node = graph.getElementById(ids.get(entity.name));
         if (view !== 'all') {
           const bounds = graph.elements().not('.filtered-out').boundingBox();
           const { x, y } = node.position();
@@ -109,13 +109,13 @@ function showGraph(data) {
       item.appendChild(button);
       results.appendChild(item);
     }
-    searchStatus.textContent = matches.length ? '' : 'No matching tables.';
+    searchStatus.textContent = matches.length ? '' : 'No matching entities.';
   }
   search.addEventListener('input', updateResults);
   updateResults();
-  document.getElementById('table-list').hidden = false;
+  document.getElementById('entity-list').hidden = false;
   const inspector = document.getElementById('selection-status');
-  const views = document.getElementById('lineage-views');
+  const views = document.getElementById('dependency-views');
   const graphFilter = document.getElementById('graph-filter');
   const filterStatus = document.getElementById('graph-filter-status');
   const viewButtons = [...views.querySelectorAll('button')];
@@ -136,9 +136,9 @@ function showGraph(data) {
     return visited;
   }
   function updateView(fit) {
-    const visible = view === 'all' ? new Set(tables.keys()) : new Set([selected]);
+    const visible = view === 'all' ? new Set(entities.keys()) : new Set([selected]);
     if (view === 'upstream' || view === 'connected') {
-      for (const name of reachable(selected, name => tables.get(name).inputs)) visible.add(name);
+      for (const name of reachable(selected, name => entities.get(name).dependencies)) visible.add(name);
     }
     if (view === 'downstream' || view === 'connected') {
       for (const name of reachable(selected, name => downstream.get(name))) visible.add(name);
@@ -150,11 +150,11 @@ function showGraph(data) {
     graph.nodes().forEach(node => node.toggleClass('filtered-out', !visible.has(node.data('name'))));
     graph.edges().forEach(edge => edge.toggleClass('filtered-out',
       !visible.has(edge.source().data('name')) || !visible.has(edge.target().data('name'))));
-    names.textContent = 'Tables: ' + data.tables.filter(table => visible.has(table.name))
-      .map(table => table.name + (table.documented ? '' : ' (undocumented)')).join(', ');
+    names.textContent = 'Entities: ' + data.entities.filter(entity => visible.has(entity.name))
+      .map(entity => entity.name + (entity.documented ? '' : ' (undocumented)')).join(', ');
     relationships.textContent = 'Relationships: ' + (data.edges.filter(edge => visible.has(edge.source) && visible.has(edge.target))
       .map(edge => `${edge.source} → ${edge.target}`).join(', ') || 'none');
-    filterStatus.textContent = query && !visible.size ? 'No matching tables.' : '';
+    filterStatus.textContent = query && !visible.size ? 'No matching entities.' : '';
     for (const button of viewButtons) {
       button.disabled = button.dataset.view !== 'all' && selected === null;
       button.setAttribute('aria-pressed', String(button.dataset.view === view));
@@ -170,8 +170,8 @@ function showGraph(data) {
   }
   views.hidden = false;
   updateView(false);
-  function selectTable(name) {
-    const table = tables.get(name);
+  function selectEntity(name) {
+    const entity = entities.get(name);
     const clearFilter = !name.toLowerCase().includes(filterQuery());
     if (clearFilter) graphFilter.value = '';
     selected = name;
@@ -180,12 +180,12 @@ function showGraph(data) {
     updateView(clearFilter || view !== 'all');
     inspector.replaceChildren();
     const heading = document.createElement('h2');
-    heading.textContent = table.name;
+    heading.textContent = entity.name;
     inspector.appendChild(heading);
-    if (!table.documented) {
+    if (!entity.documented) {
       const badge = document.createElement('span');
       badge.className = 'undocumented-badge';
-      badge.textContent = 'Undocumented input table';
+      badge.textContent = 'Undocumented entity';
       inspector.appendChild(badge);
     }
     const details = document.createElement('div');
@@ -194,12 +194,12 @@ function showGraph(data) {
     const descriptionHeading = document.createElement('h3');
     descriptionHeading.textContent = 'Description';
     const descriptionText = document.createElement('p');
-    descriptionText.textContent = table.documented ? (table.description || 'No description provided.') : 'Unknown';
+    descriptionText.textContent = entity.documented ? (entity.description || 'No description provided.') : 'Unknown';
     description.append(descriptionHeading, descriptionText);
-    if (table.extras && table.extras.length) {
+    if (entity.extras && entity.extras.length) {
       const extras = document.createElement('dl');
-      extras.className = 'table-extras';
-      for (const [key, value] of table.extras) {
+      extras.className = 'entity-extras';
+      for (const [key, value] of entity.extras) {
         const label = document.createElement('dt');
         label.textContent = key;
         const content = document.createElement('dd');
@@ -224,9 +224,9 @@ function showGraph(data) {
           const item = document.createElement('li');
           const button = document.createElement('button');
           button.type = 'button';
-          button.className = 'related-table';
-          button.textContent = relatedName + (tables.get(relatedName).documented ? '' : ' (undocumented)');
-          button.addEventListener('click', () => selectTable(relatedName));
+          button.className = 'related-entity';
+          button.textContent = relatedName + (entities.get(relatedName).documented ? '' : ' (undocumented)');
+          button.addEventListener('click', () => selectEntity(relatedName));
           item.appendChild(button);
           list.appendChild(item);
         }
@@ -235,12 +235,12 @@ function showGraph(data) {
       return section;
     }
     details.append(
-      relationshipSection('Direct inputs', table.inputs, table.documented ? 'No input tables.' : 'Unknown'),
-      relationshipSection('Direct downstream tables', downstream.get(name), 'No downstream tables.')
+      relationshipSection('Direct dependencies', entity.dependencies, entity.documented ? 'No dependencies.' : 'Unknown'),
+      relationshipSection('Direct downstream entities', downstream.get(name), 'No downstream entities.')
     );
     inspector.appendChild(details);
   }
-  graph.on('tap', 'node', event => selectTable(event.target.data('name')));
+  graph.on('tap', 'node', event => selectEntity(event.target.data('name')));
   graph.on('mouseover', 'node', event => { graph.container().title = event.target.data('name'); });
   graph.on('mouseout', 'node', () => { graph.container().removeAttribute('title'); });
   const zoomLevel = document.getElementById('zoom-level');

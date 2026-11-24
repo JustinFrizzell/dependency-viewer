@@ -7,7 +7,7 @@ module.exports = {
   mode: 'production',
   devtool: false,
   entry: path.resolve(__dirname, 'index.js'),
-  output: { path: path.resolve(__dirname, '../dist'), filename: 'lineage-viewer.js' },
+  output: { path: path.resolve(__dirname, '../dist'), filename: 'dependency-viewer.js' },
   optimization: {
     minimizer: [new TerserPlugin({
       extractComments: false,
@@ -16,7 +16,7 @@ module.exports = {
   },
   performance: false,
   plugins: [
-    new HtmlWebpackPlugin({ template: path.resolve(__dirname, 'index.html'), filename: 'lineage-viewer.html', inject: 'body', minify: false }),
+    new HtmlWebpackPlugin({ template: path.resolve(__dirname, 'index.html'), filename: 'dependency-viewer.html', inject: 'body', minify: false }),
     new HtmlInlineScriptPlugin(),
   ],
   module: { rules: [{ test: /\.css$/, use: ['style-loader', 'css-loader'] }] },

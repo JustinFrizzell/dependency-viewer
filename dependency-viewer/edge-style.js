@@ -1,4 +1,4 @@
-const lineageEdgeStyle = {
+const dependencyEdgeStyle = {
   width: 2,
   'line-color': '#99b0b9',
   'target-arrow-color': '#99b0b9',
@@ -10,4 +10,4 @@ const lineageEdgeStyle = {
   'line-dash-pattern': [8, 6],
 };
 
-module.exports = { lineageEdgeStyle };
+module.exports = { dependencyEdgeStyle };

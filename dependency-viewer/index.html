@@ -3,37 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lineage viewer</title>
+  <title>Dependency viewer</title>
 </head>
 <body>
-  <header><h1>Lineage viewer</h1><span>Table lineage</span></header>
+  <header><h1>Dependency viewer</h1><span>Entity dependency</span></header>
   <main>
-    <div id="graph" role="img" aria-label="Directed table lineage graph" aria-describedby="graph-summary"></div>
+    <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
     <p id="status" role="status"></p>
     <p id="graph-filter-status" role="status"></p>
     <div id="graph-summary" class="visually-hidden"></div>
-    <details id="table-list" open hidden>
-      <summary>Tables</summary>
-      <div class="table-list-content">
-        <label for="table-search">Search tables</label>
-        <input id="table-search" type="search" autocomplete="off" placeholder="Search full table names">
-        <p id="table-search-status" role="status"></p>
-        <ul id="table-results"></ul>
+    <details id="entity-list" open hidden>
+      <summary>Entities</summary>
+      <div class="entity-list-content">
+        <label for="entity-search">Search entities</label>
+        <input id="entity-search" type="search" autocomplete="off" placeholder="Search full entity names">
+        <p id="entity-search-status" role="status"></p>
+        <ul id="entity-results"></ul>
       </div>
     </details>
     <details id="colour-settings" open hidden>
       <summary>Colours</summary>
       <div class="colour-settings-content">
         <div class="colour-settings-actions">
-          <label><input id="colours-enabled" type="checkbox" checked> Colour tables</label>
+          <label><input id="colours-enabled" type="checkbox" checked> Colour entities</label>
           <button id="reset-colours" type="button">Reset</button>
         </div>
-        <p>Colour tables when their full name contains this text. The first match wins.</p>
+        <p>Colour entities when their full name contains this text. The first match wins.</p>
         <div id="colour-rules"></div>
       </div>
     </details>
-    <div id="lineage-views" aria-label="Lineage view" hidden>
-      <input id="graph-filter" type="search" aria-label="Filter graph by table name" autocomplete="off" placeholder="Filter table names">
+    <div id="dependency-views" aria-label="Dependency view" hidden>
+      <input id="graph-filter" type="search" aria-label="Filter graph by entity name" autocomplete="off" placeholder="Filter entity names">
       <button type="button" data-view="all" aria-pressed="true">All</button>
       <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
       <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
@@ -49,10 +49,10 @@
   </main>
   <footer>
     <details id="inspector" open>
-      <summary>Table details</summary>
-      <div id="selection-status" aria-live="polite">No table selected. Select a table to inspect its details.</div>
+      <summary>Entity details</summary>
+      <div id="selection-status" aria-live="polite">No entity selected. Select an entity to inspect its details.</div>
     </details>
   </footer>
-  <script id="lineage-data" type="application/json">__LINEAGE_DATA_JSON__</script>
+  <script id="dependency-data" type="application/json">__DEPENDENCY_DATA_JSON__</script>
 </body>
 </html>

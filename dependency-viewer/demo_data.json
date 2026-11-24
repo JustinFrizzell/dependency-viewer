@@ -1,49 +1,49 @@
 {
-  "tables": [
+  "entities": [
     {
       "name": "workspace.lakehouse.bronze_raw.orders",
       "description": "Order headers exported from the commerce platform.",
       "owner": "Commerce data team",
       "refresh": "Hourly",
       "tags": ["commerce", "orders", "source"],
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.order_lines",
       "description": "One source row per item on a customer order.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.customers",
       "description": "Customer accounts and signup attributes.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.products",
       "description": "Product catalog with current list prices and categories.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.silver_staging.orders",
       "description": "Cleaned orders with normalized timestamps and customer keys.",
       "owner": "Analytics engineering",
       "quality": {"tier": "silver", "verified": true},
-      "inputs": ["workspace.lakehouse.bronze_raw.orders", "workspace.lakehouse.bronze_raw.customers"]
+      "dependencies": ["workspace.lakehouse.bronze_raw.orders", "workspace.lakehouse.bronze_raw.customers"]
     },
     {
       "name": "workspace1.lakehouse.silver_staging.order_lines",
       "description": "Validated order lines joined to product details.",
-      "inputs": ["workspace1.lakehouse.bronze_raw.order_lines", "workspace1.lakehouse.bronze_raw.products", "workspace1.lakehouse.bronze_raw.orders"]
+      "dependencies": ["workspace1.lakehouse.bronze_raw.order_lines", "workspace1.lakehouse.bronze_raw.products", "workspace1.lakehouse.bronze_raw.orders"]
     },
     {
       "name": "workspace1.lakehouse.silver_intermediate.order_revenue",
       "description": "Net revenue per order line after discounts and refunds.",
-      "inputs": ["workspace1.lakehouse.silver_staging.order_lines", "workspace1.lakehouse.silver_staging.orders"]
+      "dependencies": ["workspace1.lakehouse.silver_staging.order_lines", "workspace1.lakehouse.silver_staging.orders"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.customer_activity",
       "description": "First order, latest order, and order frequency by customer.",
-      "inputs": ["workspace.lakehouse.silver_staging.orders"]
+      "dependencies": ["workspace.lakehouse.silver_staging.orders"]
     },
     {
       "name": "workspace.lakehouse.gold_mart.daily_revenue",
@@ -51,57 +51,57 @@
       "owner": "Finance analytics",
       "refresh_interval_hours": 24,
       "tags": ["finance", "revenue", "daily"],
-      "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue"]
+      "dependencies": ["workspace1.lakehouse.silver_intermediate.order_revenue"]
     },
     {
       "name": "workspace1.lakehouse.gold_mart.customer_value",
       "description": "Lifetime and trailing-90-day value for each customer.",
-      "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.silver_intermediate.customer_activity"]
+      "dependencies": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.silver_intermediate.customer_activity"]
     },
     {
       "name": "workspace1.lakehouse.gold_mart.product_performance",
       "description": "Units sold, returns, and revenue by product.",
-      "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.bronze_raw.products"]
+      "dependencies": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.bronze_raw.products"]
     },
     {
       "name": "workspace1.report.commerce_pulse",
       "description": "Executive snapshot of sales, customer value, and top products.",
-      "inputs": ["workspace1.lakehouse.gold_mart.daily_revenue", "workspace1.lakehouse.gold_mart.customer_value", "workspace1.lakehouse.gold_mart.product_performance"]
+      "dependencies": ["workspace1.lakehouse.gold_mart.daily_revenue", "workspace1.lakehouse.gold_mart.customer_value", "workspace1.lakehouse.gold_mart.product_performance"]
     },
     {
       "name": "workspace.lakehouse.bronze_raw.app_events",
       "description": "Product interaction events emitted by web and mobile clients.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.accounts",
       "description": "Workspace accounts and their creation dates.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.plans",
       "description": "Subscription plan definitions and feature entitlements.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.silver_staging.account_events",
       "description": "Events cleaned and attributed to a workspace account.",
-      "inputs": ["workspace.lakehouse.bronze_raw.app_events", "workspace.lakehouse.bronze_raw.accounts"]
+      "dependencies": ["workspace.lakehouse.bronze_raw.app_events", "workspace.lakehouse.bronze_raw.accounts"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.account_sessions",
       "description": "Product sessions with duration and active-day measures.",
-      "inputs": ["workspace.lakehouse.silver_staging.account_events"]
+      "dependencies": ["workspace.lakehouse.silver_staging.account_events"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.feature_usage",
       "description": "Weekly feature use by account and subscription plan.",
-      "inputs": ["workspace.lakehouse.silver_intermediate.account_sessions", "workspace.lakehouse.bronze_raw.plans"]
+      "dependencies": ["workspace.lakehouse.silver_intermediate.account_sessions", "workspace.lakehouse.bronze_raw.plans"]
     },
     {
       "name": "workspace.lakehouse.gold_mart.feature_adoption",
       "description": "Adoption and retention metrics for each product feature.",
-      "inputs": ["workspace.lakehouse.silver_intermediate.feature_usage"]
+      "dependencies": ["workspace.lakehouse.silver_intermediate.feature_usage"]
     },
     {
       "name": "workspace.report.product_health",
@@ -109,82 +109,82 @@
       "owner": "Growth analytics",
       "certified": true,
       "reporting_period": "Weekly",
-      "inputs": ["workspace.lakehouse.gold_mart.feature_adoption", "workspace.lakehouse.silver_intermediate.account_sessions"]
+      "dependencies": ["workspace.lakehouse.gold_mart.feature_adoption", "workspace.lakehouse.silver_intermediate.account_sessions"]
     },
     {
       "name": "workspace.lakehouse.bronze_raw.shipments",
       "description": "Fulfillment records exported by the warehouse system.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.tracking_events",
       "description": "Carrier scans such as picked up, in transit, and delivered.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.support_cases",
       "description": "Customer support cases tagged as delivery-related.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.carriers",
       "description": "Carrier identifiers and service details.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.delivery_routes",
       "description": "Routes assigned to deliveries.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.delivery_addresses",
       "description": "Destination addresses for shipments.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.warehouses",
       "description": "Warehouse locations and fulfillment details.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.packages",
       "description": "Packages and their shipment assignments.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.delivery_exceptions",
       "description": "Reported delays and delivery exceptions.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.proof_of_delivery",
       "description": "Confirmation records for completed deliveries.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.bronze_raw.delivery_attempts",
       "description": "Carrier delivery attempt records.",
-      "inputs": []
+      "dependencies": []
     },
     {
       "name": "workspace.lakehouse.silver_staging.delivery_events",
       "description": "Deduplicated carrier scans matched to shipment identifiers.",
-      "inputs": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments", "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference", "workspace.lakehouse.bronze_raw.carriers", "workspace.lakehouse.bronze_raw.delivery_routes", "workspace.lakehouse.bronze_raw.delivery_addresses", "workspace.lakehouse.bronze_raw.warehouses", "workspace.lakehouse.bronze_raw.packages", "workspace.lakehouse.bronze_raw.delivery_exceptions", "workspace.lakehouse.bronze_raw.proof_of_delivery", "workspace.lakehouse.bronze_raw.delivery_attempts"]
+      "dependencies": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments", "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference", "workspace.lakehouse.bronze_raw.carriers", "workspace.lakehouse.bronze_raw.delivery_routes", "workspace.lakehouse.bronze_raw.delivery_addresses", "workspace.lakehouse.bronze_raw.warehouses", "workspace.lakehouse.bronze_raw.packages", "workspace.lakehouse.bronze_raw.delivery_exceptions", "workspace.lakehouse.bronze_raw.proof_of_delivery", "workspace.lakehouse.bronze_raw.delivery_attempts"]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.delivery_metrics",
       "description": "Transit time and on-time status by shipment and carrier.",
-      "inputs": ["workspace.lakehouse.silver_staging.delivery_events"]
+      "dependencies": ["workspace.lakehouse.silver_staging.delivery_events"]
     },
     {
       "name": "workspace.lakehouse.gold_mart.fulfillment_scorecard",
       "description": "Weekly delivery performance alongside customer-reported issues.",
-      "inputs": ["workspace.lakehouse.silver_intermediate.delivery_metrics", "workspace.lakehouse.bronze_raw.support_cases"]
+      "dependencies": ["workspace.lakehouse.silver_intermediate.delivery_metrics", "workspace.lakehouse.bronze_raw.support_cases"]
     },
     {
       "name": "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference",
       "description": "Calendar of public holidays used for business-day planning.",
-      "inputs": []
+      "dependencies": []
     }
   ]
 }

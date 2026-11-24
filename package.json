@@ -1,9 +1,9 @@
 {
   "scripts": {
-    "build": "npm run build:lineage",
-    "test": "npm run test:lineage",
-    "build:lineage": "webpack --config lineage-viewer/webpack.config.js && node lineage-viewer/build-demo.cjs",
-    "test:lineage": "npm run build:lineage && node --test lineage-viewer/*.test.cjs"
+    "build": "npm run build:dependency",
+    "test": "npm run test:dependency",
+    "build:dependency": "webpack --config dependency-viewer/webpack.config.js && node dependency-viewer/build-demo.cjs",
+    "test:dependency": "npm run build:dependency && node --test dependency-viewer/*.test.cjs"
   },
   "devDependencies": {
     "css-loader": "^6.8.1",
