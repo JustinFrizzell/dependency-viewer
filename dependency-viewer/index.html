@@ -82,6 +82,21 @@
       <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
       <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
       <button id="toggle-file-panel" type="button" aria-controls="file-panel" aria-expanded="false">File</button>
+      <details id="export-menu">
+        <summary>Export</summary>
+        <div class="export-menu-content">
+          <strong>Export filtered graph</strong>
+          <label for="export-resolution">Resolution</label>
+          <select id="export-resolution">
+            <option value="1">1×</option>
+            <option value="2" selected>2×</option>
+            <option value="4">4×</option>
+          </select>
+          <p id="export-dimensions" aria-live="polite"></p>
+          <button id="export-png" type="button">Export PNG</button>
+          <p id="export-status" role="status"></p>
+        </div>
+      </details>
     </div>
     <div class="controls" aria-label="Graph navigation" hidden>
       <button id="zoom-in" type="button" aria-label="Zoom in">+</button>

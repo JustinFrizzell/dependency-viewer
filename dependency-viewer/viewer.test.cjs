@@ -182,6 +182,47 @@ function clickGraph(dom, x, y) {
   }
 }
 
+test('exports the full filtered graph at the selected resolution', async () => {
+  const dom = open(dataset({ entities: [
+    { name: 'first', dependencies: [] },
+    { name: 'second', dependencies: ['first'] },
+    { name: 'third', dependencies: ['second'] },
+  ] }));
+  try {
+    const document = dom.window.document;
+    const dimensions = document.getElementById('export-dimensions');
+    const fullSize = dimensions.textContent;
+    const filter = document.getElementById('graph-filter');
+    filter.value = 'first';
+    filter.dispatchEvent(new dom.window.Event('input'));
+    assert.notEqual(dimensions.textContent, fullSize);
+    const resolution = document.getElementById('export-resolution');
+    resolution.value = '4';
+    resolution.dispatchEvent(new dom.window.Event('change'));
+    const expected = dimensions.textContent.match(/[\d,]+/g).map(value => Number(value.replaceAll(',', '')));
+    const rendered = [];
+    dom.window.HTMLCanvasElement.prototype.toBlob = function (callback) {
+      rendered.push([this.width, this.height]);
+      callback(new dom.window.Blob(['png'], { type: 'image/png' }));
+    };
+    dom.window.Image = class {
+      set src(value) { queueMicrotask(() => this.onload()); }
+    };
+    dom.window.URL.createObjectURL = () => 'blob:test';
+    dom.window.URL.revokeObjectURL = () => {};
+    let downloaded;
+    dom.window.HTMLAnchorElement.prototype.click = function () { downloaded = this.download; };
+    document.getElementById('export-png').click();
+    await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    assert.deepEqual(rendered[0], expected.map(value => value - 320));
+    assert.deepEqual(rendered[1], expected);
+    assert.equal(downloaded, 'dependency-graph.png');
+    filter.value = 'no matches';
+    filter.dispatchEvent(new dom.window.Event('input'));
+    assert.equal(document.getElementById('export-png').disabled, true);
+  } finally { dom.window.close(); }
+});
+
 test('entity details can be collapsed while selection continues to update', () => {
   const dom = open(dataset({ entities: [
     { name: 'first', dependencies: [] }, { name: 'second', dependencies: ['first'] },

@@ -5,6 +5,7 @@ const { parseDependency } = require('./data');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings } = require('./colour-settings');
+const { setupImageExport } = require('./export-image');
 cytoscape.use(dagre);
 
 const fileInput = document.getElementById('dependency-file');
@@ -112,6 +113,7 @@ function showGraph(data) {
   resizeGraph = () => graph.resize();
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
   setupColourSettings(document, graph);
+  const imageExport = setupImageExport(window, document, graph);
   const entities = new Map(data.entities.map(entity => [entity.name, entity]));
   const downstream = new Map(data.entities.map(entity => [entity.name, []]));
   for (const edge of data.edges) downstream.get(edge.source).push(edge.target);
@@ -206,6 +208,7 @@ function showGraph(data) {
     relationships.textContent = 'Relationships: ' + (data.edges.filter(edge => visible.has(edge.source) && visible.has(edge.target))
       .map(edge => `${edge.source} → ${edge.target}`).join(', ') || 'none');
     filterStatus.textContent = query && !visible.size ? 'No matching entities.' : '';
+    imageExport.update();
     for (const button of viewButtons) {
       button.disabled = button.dataset.view !== 'all' && selected === null;
       button.setAttribute('aria-pressed', String(button.dataset.view === view));
@@ -311,6 +314,7 @@ function showGraph(data) {
   document.getElementById('zoom-out').addEventListener('click', () => zoom(1 / 1.25));
   return () => {
     stopEdgeMotion();
+    imageExport.cleanup();
     graph.destroy();
     resizeGraph = () => {};
   };

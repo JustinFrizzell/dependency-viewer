@@ -20,6 +20,8 @@ Use **Colours** to colour entities whose full names contain a rule's text, ignor
 
 Collapse **Entity details** at the bottom to give the graph more room; expand it again to see the current selection.
 
+Use **Export** to download a PNG of the entire current filtered graph, including nodes outside the viewport. The image preserves graph colours and selection highlighting on a white background, with a margin around the graph. Choose 1×, 2×, or 4× resolution; the menu shows the resulting dimensions, including the margin. Images are limited to 8,192 pixels per side and 32 million pixels in total. If the image is too large, choose a lower resolution or narrow the graph.
+
 ## Data format
 
 The root object has a required `entities` array (which may be empty). Each entity has a required string `name` and array of string `dependencies`, and an optional string `description`. An entity can represent anything, including a table, process, person, or place; all are treated alike. Names are exact and case-sensitive, must not be blank or have leading/trailing whitespace, and need not have any particular number of parts. Entity records must be unique and the dependency graph must be acyclic. Dependencies refer to upstream entities; each edge points from a dependency to the entity that depends on it. Repeated dependencies yield one edge. A dependency without a record is shown as an undocumented entity with unknown description and dependencies. Additional entity properties appear beneath the description, with each original key above its value. Strings are shown as plain text; other values use compact JSON. Properties follow JavaScript `Object.entries` order, including its ordering of numeric keys.
