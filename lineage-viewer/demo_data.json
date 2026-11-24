@@ -3,6 +3,9 @@
     {
       "name": "workspace.lakehouse.bronze_raw.orders",
       "description": "Order headers exported from the commerce platform.",
+      "owner": "Commerce data team",
+      "refresh": "Hourly",
+      "tags": ["commerce", "orders", "source"],
       "inputs": []
     },
     {
@@ -23,6 +26,8 @@
     {
       "name": "workspace.lakehouse.silver_staging.orders",
       "description": "Cleaned orders with normalized timestamps and customer keys.",
+      "owner": "Analytics engineering",
+      "quality": {"tier": "silver", "verified": true},
       "inputs": ["workspace.lakehouse.bronze_raw.orders", "workspace.lakehouse.bronze_raw.customers"]
     },
     {
@@ -43,6 +48,9 @@
     {
       "name": "workspace.lakehouse.gold_mart.daily_revenue",
       "description": "Daily gross and net sales by channel and currency.",
+      "owner": "Finance analytics",
+      "refresh_interval_hours": 24,
+      "tags": ["finance", "revenue", "daily"],
       "inputs": ["workspace1.lakehouse.silver_intermediate.order_revenue"]
     },
     {
@@ -98,6 +106,9 @@
     {
       "name": "workspace.report.product_health",
       "description": "Weekly product health scorecard for the growth team.",
+      "owner": "Growth analytics",
+      "certified": true,
+      "reporting_period": "Weekly",
       "inputs": ["workspace.lakehouse.gold_mart.feature_adoption", "workspace.lakehouse.silver_intermediate.account_sessions"]
     },
     {

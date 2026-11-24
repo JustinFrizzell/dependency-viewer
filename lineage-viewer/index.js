@@ -196,6 +196,18 @@ function showGraph(data) {
     const descriptionText = document.createElement('p');
     descriptionText.textContent = table.documented ? (table.description || 'No description provided.') : 'Unknown';
     description.append(descriptionHeading, descriptionText);
+    if (table.extras && table.extras.length) {
+      const extras = document.createElement('dl');
+      extras.className = 'table-extras';
+      for (const [key, value] of table.extras) {
+        const label = document.createElement('dt');
+        label.textContent = key;
+        const content = document.createElement('dd');
+        content.textContent = typeof value === 'string' ? value : JSON.stringify(value);
+        extras.append(label, content);
+      }
+      description.appendChild(extras);
+    }
     details.appendChild(description);
     function relationshipSection(title, names, emptyText) {
       const section = document.createElement('section');

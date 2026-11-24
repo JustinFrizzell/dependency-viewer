@@ -17,6 +17,7 @@ function parseLineage(raw) {
     description: table.description,
     inputs: [...new Set(table.inputs)],
     documented: true,
+    extras: Object.entries(table).filter(([key]) => !['name', 'description', 'inputs'].includes(key)),
   }));
   const edges = [];
   for (const table of tables.slice()) {

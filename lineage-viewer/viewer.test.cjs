@@ -436,6 +436,44 @@ test('selecting a graph table opens its inspector without changing the view', ()
   } finally { dom.window.close(); }
 });
 
+test('inspector displays ordered extra properties as safe text beneath a missing description', () => {
+  const hostileKey = '<img src=x onerror="window.injectedMarkupRan=true">';
+  const hostileValue = '</script><script>window.injectedMarkupRan=true</script>\n東京';
+  const table = JSON.parse(`{"name":"sales","inputs":["missing"],"z":"plain text","10":10,"2":2,"documented":false,"empty":"","nil":null,"flag":true,"array":[1,"two"],"object":{"nested":[false,null]},"__proto__":"safe"}`);
+  table[hostileKey] = hostileValue;
+  const dom = open(injected({ tables: [table, { name: 'report', inputs: ['sales'] }] }));
+  try {
+    const document = dom.window.document;
+    const inspector = document.getElementById('selection-status');
+    [...document.querySelectorAll('#table-results button')].find(button => button.title === 'sales').click();
+    const description = inspector.querySelector('.inspector-details > section');
+    assert.equal(description.querySelector('p').textContent, 'No description provided.');
+    const extras = description.querySelector('.table-extras');
+    assert.deepEqual([...extras.children].map(element => [element.tagName, element.textContent]), [
+      ['DT', '2'], ['DD', '2'], ['DT', '10'], ['DD', '10'],
+      ['DT', 'z'], ['DD', 'plain text'], ['DT', 'documented'], ['DD', 'false'],
+      ['DT', 'empty'], ['DD', ''], ['DT', 'nil'], ['DD', 'null'],
+      ['DT', 'flag'], ['DD', 'true'], ['DT', 'array'], ['DD', '[1,"two"]'],
+      ['DT', 'object'], ['DD', '{"nested":[false,null]}'],
+      ['DT', '__proto__'], ['DD', 'safe'], ['DT', hostileKey], ['DD', hostileValue],
+    ]);
+    assert.equal(dom.window.getComputedStyle(extras.querySelector('dd')).overflowWrap, 'anywhere');
+    assert.equal(inspector.querySelectorAll('img, script').length, 0);
+    assert.equal(dom.window.injectedMarkupRan, undefined);
+    assert.equal(inspector.querySelector('.undocumented-badge'), null);
+    const related = name => [...inspector.querySelectorAll('button')].find(button => button.textContent.includes(name));
+    assert.ok(related('report'));
+    related('missing').click();
+    assert.match(inspector.textContent, /description.*unknown/i);
+    assert.match(inspector.textContent, /inputs.*unknown/i);
+    assert.equal(inspector.querySelector('.table-extras'), null);
+    related('sales').click();
+    assert.equal(inspector.querySelector('.table-extras').lastElementChild.textContent, hostileValue);
+    related('report').click();
+    assert.equal(inspector.querySelector('.table-extras'), null);
+  } finally { dom.window.close(); }
+});
+
 test('inspector navigates direct relationships and identifies undocumented inputs', () => {
   const description = 'Sales "quoted" 東京 </script><img src=x onerror=alert(1)>';
   const dom = open(injected({ tables: [
