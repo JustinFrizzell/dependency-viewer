@@ -55,10 +55,11 @@ function setupEdgeMotion(window, document, graph, button) {
     updateButton();
     start();
   });
-  document.addEventListener('visibilitychange', () => {
+  const handleVisibility = () => {
     if (document.hidden) stop();
     else start();
-  });
+  };
+  document.addEventListener('visibilitychange', handleVisibility);
   const handleMotionPreference = event => {
     systemReducedMotion = event.matches;
     if (systemReducedMotion) stop();
@@ -70,6 +71,12 @@ function setupEdgeMotion(window, document, graph, button) {
 
   updateButton();
   start();
+  return () => {
+    stop();
+    document.removeEventListener('visibilitychange', handleVisibility);
+    if (motionPreference.removeEventListener) motionPreference.removeEventListener('change', handleMotionPreference);
+    else if (motionPreference.removeListener) motionPreference.removeListener(handleMotionPreference);
+  };
 }
 
 module.exports = { setupEdgeMotion };

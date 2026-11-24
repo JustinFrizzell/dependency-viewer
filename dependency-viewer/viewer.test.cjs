@@ -3,14 +3,24 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { JSDOM } = require('jsdom');
+const { parseDependency } = require('./data');
 
 const template = () => fs.readFileSync('dist/dependency-viewer.html', 'utf8');
 
-function open(html, drawnText = []) {
-  return new JSDOM(html, {
+function open(content, drawnText = [], realReader = false) {
+  const dom = new JSDOM(typeof content === 'string' ? content : template(), {
+    url: 'file:///dependency-viewer.html',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
+      if (!realReader) {
+        window.FileReader = class {
+          readAsText(file) {
+            this.result = file.contents;
+            this.onload();
+          }
+        };
+      }
       const context = new Proxy({
         measureText: text => ({ width: text.length * 7 }),
         fillText: text => { drawnText.push(text); },
@@ -25,43 +35,135 @@ function open(html, drawnText = []) {
       });
     },
   });
+  if (typeof content !== 'string') loadFile(dom, content.raw);
+  return dom;
 }
 
-test('built template has one injection point and explains missing data', () => {
+function loadFile(dom, raw, name = 'dependencies.json') {
+  const input = dom.window.document.getElementById('dependency-file');
+  Object.defineProperty(input, 'files', { configurable: true, value: [{ name, contents: raw }] });
+  input.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+}
+
+test('built viewer starts empty and has no external resources', () => {
   const html = template();
-  assert.equal(html.split('__DEPENDENCY_DATA_JSON__').length - 1, 1);
+  assert.ok(!html.includes('__DEPENDENCY_DATA_JSON__'));
   const dom = open(html);
-  const marker = dom.window.document.getElementById('dependency-data');
-  assert.equal(marker.type, 'application/json');
-  assert.equal(marker.textContent, '__DEPENDENCY_DATA_JSON__');
   assert.equal(dom.window.document.querySelectorAll('script[src], link[href], img[src], iframe[src]').length, 0);
-  assert.match(dom.window.document.body.textContent, /dependency data has not been embedded/i);
+  assert.match(dom.window.document.getElementById('status').textContent, /choose a json file/i);
+  assert.equal(dom.window.document.getElementById('file-panel').hidden, false);
+  const example = dom.window.document.getElementById('format-example').value;
+  assert.equal(parseDependency(example).entities.length, 4);
   dom.window.close();
 });
 
-test('built demo embeds the demo dataset and displays its graph', () => {
-  const html = fs.readFileSync('dist/dependency-demo.html', 'utf8');
-  const expected = JSON.parse(fs.readFileSync('dependency-viewer/demo_data.json', 'utf8'));
-  const dom = open(html);
+function dataset(value) {
+  return { raw: JSON.stringify(value) };
+}
+
+test('new files reset the viewer, while invalid files preserve it', () => {
+  const data = JSON.stringify({ entities: [
+    { name: 'first', dependencies: [] }, { name: 'second', dependencies: ['first'] },
+  ] });
+  const dom = open(template());
   try {
     const document = dom.window.document;
-    assert.deepEqual(JSON.parse(document.getElementById('dependency-data').textContent), expected);
-    assert.equal(document.querySelectorAll('script[src], link[href], img[src], iframe[src]').length, 0);
-    assert.equal(document.getElementById('status').textContent, '');
-    assert.ok(document.querySelector('#graph canvas'));
-    assert.match(document.getElementById('graph-summary').textContent, /workspace\.lakehouse\.bronze_raw\.orders/);
-    const result = [...document.querySelectorAll('#entity-results button')]
-      .find(button => button.title === 'workspace1.report.commerce_pulse');
-    assert.ok(result);
-    result.click();
-    assert.equal(document.querySelector('#selection-status h2').textContent, 'workspace1.report.commerce_pulse');
+    loadFile(dom, data, 'first.json');
+    assert.equal(document.getElementById('file-panel').hidden, true);
+    const fileButton = document.getElementById('toggle-file-panel');
+    assert.equal(fileButton.previousElementSibling.dataset.view, 'downstream');
+    assert.equal(fileButton.getAttribute('aria-expanded'), 'false');
+    fileButton.click();
+    assert.equal(document.getElementById('file-panel').hidden, false);
+    assert.equal(fileButton.getAttribute('aria-expanded'), 'true');
+    document.querySelector('#entity-results button').click();
+    document.querySelector('[data-view="downstream"]').click();
+    const search = document.getElementById('entity-search');
+    search.value = 'first';
+    search.dispatchEvent(new dom.window.Event('input'));
+    const filter = document.getElementById('graph-filter');
+    filter.value = 'first';
+    filter.dispatchEvent(new dom.window.Event('input'));
+    document.getElementById('colours-enabled').click();
+    document.getElementById('edge-motion').click();
+    const summary = document.getElementById('graph-summary').textContent;
+    loadFile(dom, '{invalid', 'bad.json');
+    assert.match(document.getElementById('file-error').textContent, /error/i);
+    assert.equal(document.getElementById('file-panel').hidden, false);
+    assert.equal(document.getElementById('file-name').textContent, 'first.json');
+    assert.equal(document.getElementById('graph-summary').textContent, summary);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'first');
+    assert.equal(document.querySelector('[data-view="downstream"]').getAttribute('aria-pressed'), 'true');
+    loadFile(dom, data, 'first.json');
+    assert.equal(document.getElementById('file-panel').hidden, true);
+    assert.equal(document.getElementById('file-error').textContent, '');
+    assert.equal(document.getElementById('entity-search').value, '');
+    assert.equal(document.getElementById('graph-filter').value, '');
+    assert.equal(document.getElementById('colours-enabled').checked, true);
+    assert.equal(document.getElementById('edge-motion').textContent, 'Pause');
+    assert.equal(document.querySelector('[data-view="all"]').getAttribute('aria-pressed'), 'true');
+    assert.match(document.getElementById('selection-status').textContent, /no entity selected/i);
+    loadFile(dom, JSON.stringify({ entities: [{ name: 'replacement', dependencies: [] }] }), 'second.json');
+    assert.match(document.getElementById('graph-summary').textContent, /replacement/);
+    assert.doesNotMatch(document.getElementById('graph-summary').textContent, /first|second/);
+    loadFile(dom, '{"entities":[]}', 'empty.json');
+    assert.match(document.getElementById('status').textContent, /no entities/i);
+    assert.equal(document.querySelector('.controls').hidden, true);
+    assert.equal(document.getElementById('file-panel').hidden, false);
+    assert.equal(document.getElementById('toggle-file-panel').getAttribute('aria-expanded'), 'true');
+    assert.equal(document.getElementById('dependency-views').hidden, true);
   } finally { dom.window.close(); }
 });
 
-function injected(value) {
-  const json = JSON.stringify(value).replace(/</g, '\\u003c');
-  return template().replace('__DEPENDENCY_DATA_JSON__', json);
-}
+test('reads an actual browser File and ignores stale asynchronous reads', async () => {
+  const dom = open(template(), [], true);
+  try {
+    const document = dom.window.document;
+    const input = document.getElementById('dependency-file');
+    const file = new dom.window.File(['{"entities":[{"name":"actual","dependencies":[]}]}'], 'actual.json');
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new dom.window.Event('change'));
+    await new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    assert.match(document.getElementById('graph-summary').textContent, /actual/);
+    const readers = [];
+    dom.window.FileReader = class {
+      constructor() { readers.push(this); }
+      readAsText() {}
+    };
+    loadFile(dom, '', 'old.json');
+    loadFile(dom, '', 'new.json');
+    readers[1].result = '{"entities":[{"name":"new","dependencies":[]}]}';
+    readers[1].onload();
+    readers[0].result = '{"entities":[{"name":"old","dependencies":[]}]}';
+    readers[0].onload();
+    assert.match(document.getElementById('graph-summary').textContent, /new/);
+    assert.doesNotMatch(document.getElementById('graph-summary').textContent, /old/);
+    assert.equal(document.getElementById('file-name').textContent, 'new.json');
+    loadFile(dom, '', 'unreadable.json');
+    readers[2].onerror();
+    assert.match(document.getElementById('file-error').textContent, /could not read/i);
+    assert.match(document.getElementById('graph-summary').textContent, /new/);
+  } finally { dom.window.close(); }
+});
+
+test('example copies to clipboard or remains selectable when clipboard is unavailable', async () => {
+  const dom = open(template());
+  try {
+    const document = dom.window.document;
+    const example = document.getElementById('format-example');
+    const button = document.getElementById('copy-example');
+    button.click();
+    assert.match(document.getElementById('copy-status').textContent, /select and copy/i);
+    let copied;
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+      value: { writeText: async text => { copied = text; } },
+    });
+    button.click();
+    await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    assert.equal(copied, example.value);
+    assert.equal(document.getElementById('copy-status').textContent, 'Copied.');
+  } finally { dom.window.close(); }
+});
 
 function clickGraph(dom, x, y) {
   const graph = dom.window.document.querySelector('#graph canvas');
@@ -75,7 +177,7 @@ function clickGraph(dom, x, y) {
 }
 
 test('entity details can be collapsed while selection continues to update', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'first', dependencies: [] }, { name: 'second', dependencies: ['first'] },
   ] }));
   try {
@@ -95,7 +197,7 @@ test('entity details can be collapsed while selection continues to update', () =
 });
 
 test('dependency views require a selection and focus transitively in each direction', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'a', dependencies: [] }, { name: 'b', dependencies: ['a'] },
     { name: 'c', dependencies: ['b'] }, { name: 'd', dependencies: ['c'] },
     { name: 'e', dependencies: ['d'] }, { name: 'focus', dependencies: ['e', 'branch'] },
@@ -143,7 +245,7 @@ test('dependency views require a selection and focus transitively in each direct
 });
 
 test('changing selection refocuses and fits the active view and All fits without clearing it', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'input', dependencies: [] }, { name: 'middle', dependencies: ['input'] },
     { name: 'output', dependencies: ['middle'] },
   ] }));
@@ -173,7 +275,7 @@ test('changing selection refocuses and fits the active view and All fits without
 });
 
 test('searching for another entity refocuses, fits, and centers the active dependency view', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'input', dependencies: [] }, { name: 'middle', dependencies: ['input'] },
     { name: 'output', dependencies: ['middle'] }, { name: 'isolated', dependencies: [] },
   ] }));
@@ -195,7 +297,7 @@ test('searching for another entity refocuses, fits, and centers the active depen
 });
 
 test('filtered search centers an endpoint while keeping its multi-hop dependency on canvas', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'a', dependencies: [] }, { name: 'b', dependencies: ['a'] },
     { name: 'c', dependencies: ['b'] }, { name: 'd', dependencies: ['c'] },
     { name: 'e', dependencies: ['d'] }, { name: 'isolated', dependencies: [] },
@@ -224,7 +326,7 @@ test('filtered search centers an endpoint while keeping its multi-hop dependency
 });
 
 test('entity search matches full names case-insensitively without merging identities', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'DB.Raw.Orders', dependencies: ['external.Source'] },
     { name: 'db.raw.orders', dependencies: [] },
     { name: 'other', dependencies: [] },
@@ -251,7 +353,7 @@ test('entity search matches full names case-insensitively without merging identi
 });
 
 test('graph name filter intersects dependency views and hides edges to nonmatching entities', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'DB.Raw.Orders', dependencies: [] },
     { name: 'db.mart.orders', dependencies: ['DB.Raw.Orders'] },
     { name: 'db.mart.customers', dependencies: ['db.mart.orders'] },
@@ -291,7 +393,7 @@ test('graph name filter intersects dependency views and hides edges to nonmatchi
 });
 
 test('selecting a nonmatching entity clears the graph filter from either navigation panel', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] },
   ] }));
   try {
@@ -319,7 +421,7 @@ test('selecting a nonmatching entity clears the graph filter from either navigat
 });
 
 test('filtering fits the matching graph node and leaves zoom unchanged when no entities match', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'first', dependencies: [] }, { name: 'second', dependencies: ['first'] },
     { name: 'third', dependencies: ['second'] },
   ] }));
@@ -344,7 +446,7 @@ test('filtering fits the matching graph node and leaves zoom unchanged when no e
 });
 
 test('selecting a search result opens its details and centers that exact entity', () => {
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'DB.Raw', dependencies: ['missing'], description: 'Uppercase entity' },
     { name: 'db.raw', dependencies: [], description: 'Lowercase entity' },
   ] }));
@@ -370,7 +472,7 @@ test('selecting a search result opens its details and centers that exact entity'
 test('qualified entity labels stay short while preserving distinct identities and full names', async () => {
   const drawnText = [];
   const longName = 'a_very_long_table_name_that_will_not_fit_in_the_node';
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'sales.orders', dependencies: [] },
     { name: 'support.orders', dependencies: ['sales.orders'] },
     { name: `warehouse.schema.${longName}`, dependencies: [] },
@@ -398,7 +500,7 @@ test('qualified entity labels stay short while preserving distinct identities an
 });
 
 test('entity list can be collapsed and reopened without losing the search', () => {
-  const dom = open(injected({ entities: [{ name: 'orders', dependencies: [] }, { name: 'customers', dependencies: [] }] }));
+  const dom = open(dataset({ entities: [{ name: 'orders', dependencies: [] }, { name: 'customers', dependencies: [] }] }));
   try {
     const document = dom.window.document;
     const list = document.getElementById('entity-list');
@@ -416,7 +518,7 @@ test('entity list can be collapsed and reopened without losing the search', () =
 });
 
 test('selecting a graph entity opens its inspector without changing the view', () => {
-  const dom = open(injected({ entities: [{ name: 'warehouse.orders', dependencies: [], description: 'Order facts' }] }));
+  const dom = open(dataset({ entities: [{ name: 'warehouse.orders', dependencies: [], description: 'Order facts' }] }));
   try {
     const document = dom.window.document;
     const inspector = document.getElementById('selection-status');
@@ -441,7 +543,7 @@ test('inspector displays ordered extra properties as safe text beneath a missing
   const hostileValue = '</script><script>window.injectedMarkupRan=true</script>\n東京';
   const entity = JSON.parse(`{"name":"sales","dependencies":["missing"],"z":"plain text","10":10,"2":2,"documented":false,"empty":"","nil":null,"flag":true,"array":[1,"two"],"object":{"nested":[false,null]},"__proto__":"safe"}`);
   entity[hostileKey] = hostileValue;
-  const dom = open(injected({ entities: [entity, { name: 'report', dependencies: ['sales'] }] }));
+  const dom = open(dataset({ entities: [entity, { name: 'report', dependencies: ['sales'] }] }));
   try {
     const document = dom.window.document;
     const inspector = document.getElementById('selection-status');
@@ -476,7 +578,7 @@ test('inspector displays ordered extra properties as safe text beneath a missing
 
 test('inspector navigates direct relationships and identifies undocumented dependencies', () => {
   const description = 'Sales "quoted" 東京 </script><img src=x onerror=alert(1)>';
-  const dom = open(injected({ entities: [
+  const dom = open(dataset({ entities: [
     { name: 'sales', dependencies: ['missing', 'missing'], description },
     { name: 'report', dependencies: ['sales'] },
   ] }));
@@ -510,15 +612,15 @@ test('inspector navigates direct relationships and identifies undocumented depen
 });
 
 test('empty dependency has an informative empty state', () => {
-  const dom = open(injected({ entities: [] }));
+  const dom = open(dataset({ entities: [] }));
   assert.match(dom.window.document.getElementById('status').textContent, /no entities/i);
   dom.window.close();
 });
 
-test('unusable embedded dependency displays an error', () => {
-  for (const html of [injected({ entities: [{ name: 'good', dependencies: [] }, { name: 'bad', dependencies: null }] }), template().replace('__DEPENDENCY_DATA_JSON__', '{invalid')]) {
+test('unusable dependency file displays an error', () => {
+  for (const html of [dataset({ entities: [{ name: 'good', dependencies: [] }, { name: 'bad', dependencies: null }] }), { raw: '{invalid' }]) {
     const dom = open(html);
-    assert.match(dom.window.document.getElementById('status').textContent, /error/i);
+    assert.match(dom.window.document.getElementById('file-error').textContent, /error/i);
     dom.window.close();
   }
 });
@@ -534,14 +636,14 @@ test('cyclic and invalid entity records show an error instead of a partial graph
     { entities: null },
   ];
   for (const data of invalid) {
-    const dom = open(injected(data));
-    assert.match(dom.window.document.getElementById('status').textContent, /error/i, JSON.stringify(data));
+    const dom = open(dataset(data));
+    assert.match(dom.window.document.getElementById('file-error').textContent, /error/i, JSON.stringify(data));
     dom.window.close();
   }
 });
 
-test('injected dependency exposes the complete directed graph without a selection', () => {
-  const dom = open(injected({ entities: [
+test('loaded dependency exposes the complete directed graph without a selection', () => {
+  const dom = open(dataset({ entities: [
     { name: 'DB.Raw', dependencies: [] },
     { name: 'db.raw', dependencies: ['DB.Raw', 'missing', 'missing'] },
     { name: 'output', dependencies: ['db.raw'] },
@@ -559,7 +661,7 @@ test('injected dependency exposes the complete directed graph without a selectio
 });
 
 test('zoom controls and reset change and restore the fitted view', () => {
-  const dom = open(injected({ entities: [{ name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] }] }));
+  const dom = open(dataset({ entities: [{ name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] }] }));
   try {
     const document = dom.window.document;
     const zoom = document.getElementById('zoom-level');
@@ -576,7 +678,7 @@ test('zoom controls and reset change and restore the fitted view', () => {
 });
 
 test('wheel zoom changes the graph view', () => {
-  const dom = open(injected({ entities: [{ name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] }] }));
+  const dom = open(dataset({ entities: [{ name: 'input', dependencies: [] }, { name: 'output', dependencies: ['input'] }] }));
   try {
     const document = dom.window.document;
     const zoom = document.getElementById('zoom-level');
@@ -588,9 +690,9 @@ test('wheel zoom changes the graph view', () => {
   } finally { dom.window.close(); }
 });
 
-test('safe injection retains Unicode and markup-like names without creating elements', () => {
+test('loading retains Unicode and markup-like names without creating elements', () => {
   const name = '東京 "quoted" </script><img src=x onerror=alert(1)>';
-  const dom = open(injected({ entities: [{ name, dependencies: [], description: 'quote " and </script> é' }] }));
+  const dom = open(dataset({ entities: [{ name, dependencies: [], description: 'quote " and </script> é' }] }));
   try {
     const document = dom.window.document;
     assert.equal(document.getElementById('status').textContent, '');
@@ -601,7 +703,7 @@ test('safe injection retains Unicode and markup-like names without creating elem
 
 test('generated acceptance files support representative search and dependency navigation', () => {
   execFileSync(process.execPath, ['dependency-viewer/acceptance-fixtures.cjs']);
-  const dom = open(fs.readFileSync('dist/dependency-acceptance.html', 'utf8'));
+  const dom = open({ raw: fs.readFileSync('dist/dependency-acceptance.json', 'utf8') });
   try {
     const document = dom.window.document;
     assert.equal(document.getElementById('status').textContent, '');
@@ -648,7 +750,7 @@ test('generated acceptance files support representative search and dependency na
     assert.equal(inspector.querySelector('h2').textContent, 'missing');
   } finally { dom.window.close(); }
 
-  const empty = open(fs.readFileSync('dist/dependency-acceptance-empty.html', 'utf8'));
+  const empty = open({ raw: fs.readFileSync('dist/dependency-acceptance-empty.json', 'utf8') });
   try {
     assert.match(empty.window.document.getElementById('status').textContent, /no entities/i);
   } finally { empty.window.close(); }

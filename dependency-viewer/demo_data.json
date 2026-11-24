@@ -46,7 +46,7 @@
       "dependencies": ["workspace.lakehouse.silver_staging.orders"]
     },
     {
-      "name": "workspace.lakehouse.gold_mart.daily_revenue",
+      "name": "workspace1.lakehouse.gold_mart.daily_revenue",
       "description": "Daily gross and net sales by channel and currency.",
       "owner": "Finance analytics",
       "refresh_interval_hours": 24,

@@ -1,6 +1,16 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const { parseDependency } = require('./data');
+
+test('demo revenue report connects to the documented daily revenue entity', () => {
+  const graph = parseDependency(fs.readFileSync('dependency-viewer/demo_data.json', 'utf8'));
+  const name = 'workspace1.lakehouse.gold_mart.daily_revenue';
+  const entity = graph.entities.find(item => item.name === name);
+  assert.equal(entity.documented, true);
+  assert.deepEqual(entity.dependencies, ['workspace1.lakehouse.silver_intermediate.order_revenue']);
+  assert.ok(graph.edges.some(edge => edge.source === name && edge.target === 'workspace1.report.commerce_pulse'));
+});
 
 test('graph preserves case-sensitive entities and points distinct dependencies to their dependents', () => {
   const graph = parseDependency(JSON.stringify({ entities: [

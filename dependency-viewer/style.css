@@ -4,6 +4,16 @@ body { margin: 0; height: 100vh; display: flex; flex-direction: column; }
 header { height: 62px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 24px; color: white; background: #123849; }
 h1 { margin: 0; font-size: 17px; }
 header span { color: #b7d4da; }
+.file-panel:not([hidden]) { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 24px; background: white; border-bottom: 1px solid #dfe8eb; }
+.file-panel label { font-weight: 600; margin-right: 8px; }
+.file-panel input { max-width: 100%; }
+.file-panel details { margin-left: auto; }
+.file-panel details[open] { width: 100%; }
+.file-panel summary { cursor: pointer; color: #087c72; }
+.file-panel details p { margin: 8px 0; }
+#format-example { display: block; width: min(100%, 800px); max-height: 25vh; margin-bottom: 8px; padding: 8px; font: inherit; }
+#file-error:not(:empty) { width: 100%; color: #a32020; margin: 6px 0 0; }
+#copy-status { margin-left: 8px; }
 main { position: relative; flex: 1; min-height: 0; background-color: #f5f9fa; background-image: radial-gradient(#d7e4e6 .8px, transparent .8px); background-size: 18px 18px; }
 #graph { width: 100%; height: 100%; padding: 0; border: 0; }
 #status:not(:empty) { position: absolute; top: 20px; left: 24px; margin: 0; padding: 12px 16px; background: white; border: 1px solid #d5e2e5; border-radius: 6px; }

@@ -7,22 +7,72 @@ const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings } = require('./colour-settings');
 cytoscape.use(dagre);
 
-const status = document.getElementById('status');
-const embedded = document.getElementById('dependency-data').textContent.trim();
-if (embedded === ['__DEPENDENCY', 'DATA', 'JSON__'].join('_')) {
-  status.textContent = 'Dependency data has not been embedded in this template.';
-} else {
-  try {
-    const data = parseDependency(embedded);
-    if (!data.entities.length) {
-      status.textContent = 'No entities in this dependency dataset.';
-    } else {
-      showGraph(data);
+const fileInput = document.getElementById('dependency-file');
+const fileError = document.getElementById('file-error');
+const filePanel = document.getElementById('file-panel');
+const mainTemplate = document.querySelector('main').cloneNode(true);
+const footerTemplate = document.querySelector('footer').cloneNode(true);
+document.getElementById('status').textContent = 'Choose a JSON file to view dependencies.';
+let cleanupGraph = () => {};
+let resizeGraph = () => {};
+let selection = 0;
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  fileInput.value = '';
+  const current = ++selection;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (current !== selection) return;
+    let data;
+    try {
+      data = parseDependency(reader.result);
+    } catch (error) {
+      fileError.textContent = `Error: unusable dependency data. ${error.message}`;
+      return;
     }
-  } catch (error) {
-    status.textContent = `Error: unusable dependency data. ${error.message}`;
+    cleanupGraph();
+    document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
+    document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
+    filePanel.hidden = data.entities.length > 0;
+    document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
+    fileError.textContent = '';
+    document.getElementById('file-name').textContent = file.name;
+    if (data.entities.length) cleanupGraph = showGraph(data);
+    else {
+      cleanupGraph = () => {};
+      document.getElementById('status').textContent = 'No entities in this dependency dataset.';
+    }
+  };
+  reader.onerror = () => {
+    if (current === selection) fileError.textContent = 'Error: could not read the selected file.';
+  };
+  reader.readAsText(file);
+});
+
+document.addEventListener('click', event => {
+  const button = event.target.closest('#toggle-file-panel');
+  if (!button) return;
+  filePanel.hidden = !filePanel.hidden;
+  button.setAttribute('aria-expanded', String(!filePanel.hidden));
+  resizeGraph();
+});
+filePanel.querySelector('details').addEventListener('toggle', () => resizeGraph());
+
+document.getElementById('copy-example').addEventListener('click', async () => {
+  const example = document.getElementById('format-example');
+  const copyStatus = document.getElementById('copy-status');
+  try {
+    if (!navigator.clipboard) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(example.value);
+    copyStatus.textContent = 'Copied.';
+  } catch {
+    example.focus();
+    example.select();
+    copyStatus.textContent = 'Select and copy the example above.';
   }
-}
+});
 
 function showGraph(data) {
   const summary = document.getElementById('graph-summary');
@@ -59,6 +109,7 @@ function showGraph(data) {
     ],
     layout: { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80, fit: true, padding: 45, animate: false },
   });
+  resizeGraph = () => graph.resize();
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
   setupColourSettings(document, graph);
   const entities = new Map(data.entities.map(entity => [entity.name, entity]));
@@ -118,7 +169,7 @@ function showGraph(data) {
   const views = document.getElementById('dependency-views');
   const graphFilter = document.getElementById('graph-filter');
   const filterStatus = document.getElementById('graph-filter-status');
-  const viewButtons = [...views.querySelectorAll('button')];
+  const viewButtons = [...views.querySelectorAll('[data-view]')];
   let selected = null;
   let view = 'all';
   const filterQuery = () => graphFilter.value.trim().toLowerCase();
@@ -248,7 +299,7 @@ function showGraph(data) {
   graph.on('zoom', updateZoom);
   updateZoom();
   document.querySelector('.controls').hidden = false;
-  setupEdgeMotion(window, document, graph, document.getElementById('edge-motion'));
+  const stopEdgeMotion = setupEdgeMotion(window, document, graph, document.getElementById('edge-motion'));
   document.getElementById('fit').addEventListener('click', () => {
     const visible = graph.elements().not('.filtered-out');
     if (visible.length) graph.fit(visible, 45);
@@ -258,4 +309,9 @@ function showGraph(data) {
   }
   document.getElementById('zoom-in').addEventListener('click', () => zoom(1.25));
   document.getElementById('zoom-out').addEventListener('click', () => zoom(1 / 1.25));
+  return () => {
+    stopEdgeMotion();
+    graph.destroy();
+    resizeGraph = () => {};
+  };
 }

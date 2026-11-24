@@ -7,6 +7,45 @@
 </head>
 <body>
   <header><h1>Dependency viewer</h1><span>Entity dependency</span></header>
+  <section id="file-panel" class="file-panel" aria-label="Dependency file">
+    <label for="dependency-file">Choose dependency JSON</label>
+    <input id="dependency-file" type="file" accept=".json,application/json">
+    <span id="file-name"></span>
+    <p id="file-error" role="alert"></p>
+    <details>
+      <summary>JSON format and example</summary>
+      <p>This is an offline tool. Your data stays in your browser and is not uploaded to the internet.</p>
+      <p>Use an object with an <code>entities</code> array. Each entity needs a unique, nonblank <code>name</code> without surrounding whitespace and a <code>dependencies</code> array of upstream entity names. Names are case-sensitive. An optional <code>description</code> must be a string; other properties are displayed in the entity details.</p>
+      <p>Use an empty array when there are no dependencies. Missing dependency records appear as undocumented entities; repeated dependencies are combined. Cycles are not allowed.</p>
+      <textarea id="format-example" readonly aria-label="Example JSON" rows="16">{
+  "entities": [
+    {
+      "name": "source.orders",
+      "description": "A source with no upstream dependencies.",
+      "dependencies": []
+    },
+    {
+      "name": "source.customers",
+      "dependencies": []
+    },
+    {
+      "name": "model.orders_with_customers",
+      "description": "Combines two upstream sources.",
+      "dependencies": ["source.orders", "source.customers"],
+      "owner": "Analytics team",
+      "tags": ["optional", "additional properties"]
+    },
+    {
+      "name": "report.customer_orders",
+      "description": "Depends on the model, which in turn depends on both sources.",
+      "dependencies": ["model.orders_with_customers"]
+    }
+  ]
+}</textarea>
+      <button id="copy-example" type="button">Copy example</button>
+      <span id="copy-status" role="status"></span>
+    </details>
+  </section>
   <main>
     <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
     <p id="status" role="status"></p>
@@ -38,6 +77,7 @@
       <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
       <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
       <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
+      <button id="toggle-file-panel" type="button" aria-controls="file-panel" aria-expanded="false">File</button>
     </div>
     <div class="controls" aria-label="Graph navigation" hidden>
       <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
@@ -53,6 +93,5 @@
       <div id="selection-status" aria-live="polite">No entity selected. Select an entity to inspect its details.</div>
     </details>
   </footer>
-  <script id="dependency-data" type="application/json">__DEPENDENCY_DATA_JSON__</script>
 </body>
 </html>

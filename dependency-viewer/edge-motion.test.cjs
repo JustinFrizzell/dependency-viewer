@@ -33,6 +33,7 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
     matchMedia: () => ({
       matches: reducedMotion,
       addEventListener: (name, listener) => motionListeners.set(name, listener),
+      removeEventListener: name => motionListeners.delete(name),
     }),
     requestAnimationFrame: callback => {
       frameId += 1;
@@ -44,6 +45,7 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
   const document = {
     hidden,
     addEventListener: (name, listener) => documentListeners.set(name, listener),
+    removeEventListener: name => documentListeners.delete(name),
   };
   const visibleEdges = {
     style: (property, value) => {
@@ -60,7 +62,7 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
     }),
   };
   const button = new FakeButton();
-  setupEdgeMotion(window, document, graph, button);
+  const cleanup = setupEdgeMotion(window, document, graph, button);
 
   const runFrame = timestamp => {
     const callback = [...frames.values()][0];
@@ -69,7 +71,7 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
     callback(timestamp);
   };
   return {
-    button, document, frames, offsets, runFrame,
+    button, document, frames, offsets, runFrame, cleanup, motionListeners, documentListeners,
     emitVisibility: hiddenNow => {
       document.hidden = hiddenNow;
       documentListeners.get('visibilitychange')();
@@ -110,4 +112,12 @@ test('reduced-motion preference blocks animation and changes with the preference
   assert.equal(view.button.textContent, 'Pause');
   assert.equal(view.button.disabled, false);
   assert.equal(view.frames.size, 1);
+});
+
+test('cleanup cancels motion and removes global listeners', () => {
+  const view = fixture();
+  view.cleanup();
+  assert.equal(view.frames.size, 0);
+  assert.equal(view.documentListeners.size, 0);
+  assert.equal(view.motionListeners.size, 0);
 });
