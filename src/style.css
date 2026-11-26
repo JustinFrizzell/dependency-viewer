@@ -71,7 +71,8 @@ header span {
   font: inherit;
 }
 #paste-json,
-#document-json {
+#document-json,
+#new-entity-description {
   display: block;
   width: min(100%, 800px);
   max-height: 20vh;
@@ -93,7 +94,8 @@ header span {
   font-weight: 600;
 }
 #file-error:not(:empty),
-#document-error:not(:empty) {
+#document-error:not(:empty),
+#add-entity-error:not(:empty) {
   width: 100%;
   color: #a32020;
   margin: 6px 0 0;

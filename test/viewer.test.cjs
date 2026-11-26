@@ -1245,6 +1245,160 @@ test('download, undo and copy reflect saved state; replacement and leaving prote
   }
 });
 
+test('adding an Entity to an empty Document immediately updates graph, details and JSON', () => {
+  const dom = open({ raw: '{"entities":[],"extra":{"kept":true}}' });
+  try {
+    const { document, Event } = dom.window;
+    document.getElementById('new-entity-name').value = 'New';
+    document.getElementById('new-entity-description').value = 'A description';
+    document.getElementById('add-entity-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    assert.match(document.getElementById('graph-summary').textContent, /New/);
+    assert.match(document.getElementById('selection-status').textContent, /A description/);
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), {
+      entities: [{ name: 'New', dependencies: [], description: 'A description' }],
+      extra: { kept: true },
+    });
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('Entity names must be nonblank, untrimmed and unique with case-sensitive matching', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    const name = document.getElementById('new-entity-name');
+    const form = document.getElementById('add-entity-form');
+    const error = document.getElementById('add-entity-error');
+    const submit = (value) => {
+      name.value = value;
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    };
+    for (const invalid of ['', ' ', ' A', 'A ']) {
+      submit(invalid);
+      assert.match(error.textContent, /nonblank.*whitespace/i);
+      assert.deepEqual(
+        JSON.parse(document.getElementById('document-json').value).entities.map((e) => e.name),
+        ['A'],
+      );
+    }
+    submit('A');
+    assert.match(error.textContent, /already.*exist/i);
+    submit('a');
+    assert.equal(error.textContent, '');
+    assert.deepEqual(
+      JSON.parse(document.getElementById('document-json').value).entities.map((e) => e.name),
+      ['A', 'a'],
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('an unapplied JSON draft blocks adding an Entity until the draft is resolved', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    const editor = document.getElementById('document-json');
+    editor.value = '{"entities":[{"name":"B","dependencies":[]}]}';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('new-entity-name').value = 'C';
+    const form = document.getElementById('add-entity-form');
+    const submit = () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    submit();
+    assert.match(document.getElementById('add-entity-error').textContent, /apply or discard.*draft/i);
+    assert.equal(editor.value, '{"entities":[{"name":"B","dependencies":[]}]}');
+    assert.match(document.getElementById('graph-summary').textContent, /A/);
+    document.getElementById('apply-document').click();
+    assert.equal(document.getElementById('add-entity-error').textContent, '');
+    submit();
+    assert.deepEqual(
+      JSON.parse(editor.value).entities.map((entity) => entity.name),
+      ['B', 'C'],
+    );
+    document.getElementById('undo-document').click();
+    assert.deepEqual(
+      JSON.parse(editor.value).entities.map((entity) => entity.name),
+      ['B'],
+    );
+    document.getElementById('redo-document').click();
+    assert.deepEqual(
+      JSON.parse(editor.value).entities.map((entity) => entity.name),
+      ['B', 'C'],
+    );
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('adding a documented Entity round-trips existing data and saved state', async () => {
+  const raw = '{"entities":[{"name":"A","dependencies":["missing","missing"],"extra":{"x":1}}],"other":[true]}';
+  const dom = open(template(), [], true);
+  try {
+    const { document, Event, FileReader } = dom.window;
+    const input = document.getElementById('dependency-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [new dom.window.File([raw], 'original.json', { type: 'application/json' })],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 50));
+    document.getElementById('new-entity-name').value = 'missing';
+    document.getElementById('new-entity-description').value = '<img src=x onerror=alert(1)> is text';
+    document.getElementById('add-entity-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(document.querySelector('#selection-status img'), null);
+    assert.match(document.getElementById('selection-status').textContent, /<img src=x/);
+    const expected = {
+      entities: [
+        { name: 'A', dependencies: ['missing', 'missing'], extra: { x: 1 } },
+        { name: 'missing', dependencies: [], description: '<img src=x onerror=alert(1)> is text' },
+      ],
+      other: [true],
+    };
+    let copied;
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+      value: { writeText: async (value) => (copied = value) },
+    });
+    document.getElementById('copy-document').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.deepEqual(JSON.parse(copied), expected);
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    let blob;
+    dom.window.URL.createObjectURL = (value) => ((blob = value), 'blob:document');
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = () => {};
+    document.getElementById('download-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    const saved = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(blob);
+    });
+    assert.deepEqual(JSON.parse(saved), expected);
+    document.getElementById('undo-document').click();
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    assert.match(document.getElementById('graph-summary').textContent, /missing \(undocumented\)/);
+    document.getElementById('redo-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    dom.window.confirm = () => true;
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [new dom.window.File([saved], 'saved.json', { type: 'application/json' })],
+    });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 50));
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), expected);
+    document.querySelector('#entity-results button[title="missing"]').click();
+    assert.match(document.getElementById('selection-status').textContent, /<img src=x/);
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('typing in the middle of a JSON draft keeps the caret in place', () => {
   const dom = open({ raw: '{"entities":[]}' });
   try {
