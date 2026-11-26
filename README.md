@@ -22,6 +22,17 @@ npm run typecheck
 
 This builds the viewer and runs the automated viewer tests.
 
+For real-browser offline checks, install Playwright's Chromium into an isolated project directory and run:
+
+```sh
+mkdir -p .tmp
+export TMPDIR="$PWD/.tmp" PLAYWRIGHT_BROWSERS_PATH="$PWD/.tmp/browsers"
+npx playwright install chromium
+npm run test:browser
+```
+
+The browser suite opens the built HTML via `file://` in a fresh headless profile with networking disabled. It exercises paste, upload, editing, validation, warnings, download/reload, keyboard access, tooltips, graph views and PNG export; no server or shared browser profile is used. `.tmp/` can be removed after testing.
+
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE). It originated from [dbt Docs](https://github.com/dbt-labs/dbt-docs); a former CI sample was derived from [jaffle_shop](https://github.com/dbt-labs/jaffle_shop). The standalone viewer includes third-party software; its license notices are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) and embedded in the generated HTML. Update those notices when bundled dependencies change.
