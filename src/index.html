@@ -78,6 +78,17 @@
       <button id="download-document" type="button">Download Document</button>
       <span id="document-status" role="status"></span>
     </details>
+    <details id="add-entity-panel" class="document-panel" hidden>
+      <summary>Add Entity</summary>
+      <form id="add-entity-form" novalidate>
+        <label for="new-entity-name">Entity name</label>
+        <input id="new-entity-name" type="text" autocomplete="off" aria-describedby="add-entity-error" />
+        <label for="new-entity-description">Description (optional)</label>
+        <textarea id="new-entity-description" rows="3"></textarea>
+        <button type="submit">Add Entity</button>
+        <p id="add-entity-error" role="alert"></p>
+      </form>
+    </details>
     <main>
       <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
       <p id="status" role="status"></p>

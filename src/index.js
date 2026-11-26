@@ -37,6 +37,9 @@ function openDocument(raw, name) {
   documentName = name;
   updateDocumentControls();
   document.getElementById('document-panel').hidden = false;
+  document.getElementById('add-entity-panel').hidden = false;
+  document.getElementById('add-entity-form').reset();
+  document.getElementById('add-entity-error').textContent = '';
   document.getElementById('document-status').textContent = '';
   document.getElementById('document-error').textContent = '';
   renderGraph(graph);
@@ -44,13 +47,13 @@ function openDocument(raw, name) {
   document.getElementById('file-name').textContent = name;
 }
 
-function renderGraph(graph) {
+function renderGraph(graph, selectedName) {
   cleanupGraph();
   document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
   document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
   filePanel.hidden = graph.entities.length > 0;
   document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
-  if (graph.entities.length) cleanupGraph = showGraph(graph);
+  if (graph.entities.length) cleanupGraph = showGraph(graph, selectedName);
   else {
     cleanupGraph = () => {};
     resizeGraph = () => {};
@@ -71,12 +74,37 @@ function updateDocumentControls() {
   document.getElementById('copy-document').disabled = session.hasDraft();
 }
 
-function refreshDocument() {
+function refreshDocument(selectedName) {
   updateDocumentControls();
   document.getElementById('document-error').textContent = '';
   document.getElementById('document-status').textContent = '';
-  renderGraph(deriveGraph(parseDocument(session.current())));
+  renderGraph(deriveGraph(parseDocument(session.current())), selectedName);
 }
+
+document.getElementById('add-entity-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const name = document.getElementById('new-entity-name').value;
+  const description = document.getElementById('new-entity-description').value;
+  try {
+    const documentData = parseDocument(session.current());
+    if (!name || name.trim() !== name)
+      throw new Error('Entity name must be nonblank and have no surrounding whitespace.');
+    if (documentData.entities.some((entity) => entity.name === name))
+      throw new Error('An Entity with this name already exists.');
+    const entity = { name, dependencies: [] };
+    if (description) entity.description = description;
+    documentData.entities.push(entity);
+    session.replace(JSON.stringify(documentData));
+    event.target.reset();
+    document.getElementById('add-entity-error').textContent = '';
+    refreshDocument(name);
+  } catch (error) {
+    document.getElementById('add-entity-error').textContent = `Error: ${error.message}`;
+  }
+});
+document.getElementById('add-entity-form').addEventListener('input', () => {
+  document.getElementById('add-entity-error').textContent = '';
+});
 
 document.getElementById('document-json').addEventListener('input', (event) => {
   session.setDraft(event.target.value);
@@ -87,6 +115,7 @@ document.getElementById('document-json').addEventListener('input', (event) => {
 document.getElementById('apply-document').addEventListener('click', () => {
   try {
     session.apply();
+    document.getElementById('add-entity-error').textContent = '';
     refreshDocument();
   } catch (error) {
     document.getElementById('document-error').textContent = `Error: ${error.message}`;
@@ -94,6 +123,7 @@ document.getElementById('apply-document').addEventListener('click', () => {
 });
 document.getElementById('discard-document').addEventListener('click', () => {
   session.discard();
+  document.getElementById('add-entity-error').textContent = '';
   document.getElementById('document-error').textContent = '';
   updateDocumentControls();
 });
@@ -184,7 +214,7 @@ document.getElementById('copy-example').addEventListener('click', async () => {
   }
 });
 
-function showGraph(data) {
+function showGraph(data, selectedName) {
   const summary = document.getElementById('graph-summary');
   const names = document.createElement('p');
   summary.appendChild(names);
@@ -486,6 +516,7 @@ function showGraph(data) {
   }
   document.getElementById('zoom-in').addEventListener('click', () => zoom(1.25));
   document.getElementById('zoom-out').addEventListener('click', () => zoom(1 / 1.25));
+  if (selectedName && entities.has(selectedName)) selectEntity(selectedName);
   return () => {
     stopEdgeMotion();
     imageExport.cleanup();
