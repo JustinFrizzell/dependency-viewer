@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prototype: graph editing</title>
+  <style>
+    :root { font: 14px/1.5 system-ui, sans-serif; color: #172033; background: #f5f7fb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input, select { font: inherit; }
+    button, select, input { border: 1px solid #cbd4e1; border-radius: 7px; background: white; padding: 7px 10px; color: inherit; }
+    button { cursor: pointer; }
+    button:hover { border-color: #5474d9; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    button.active { background: #304fc4; border-color: #304fc4; color: white; }
+    header { padding: 14px 22px; background: white; border-bottom: 1px solid #dfe5ef; }
+    h1 { font-size: 19px; margin: 0; }
+    header p { margin: 4px 0 0; color: #526179; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 325px; min-height: calc(100vh - 78px); }
+    .workspace { min-width: 0; padding: 16px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 10px; }
+    .toolbar label { margin-left: 12px; }
+    .toolbar .spacer { flex: 1; }
+    .canvas { position: relative; border: 1px solid #d6deea; border-radius: 12px; background: #fff; overflow: hidden; }
+    .add-form { position: absolute; z-index: 1; display: grid; gap: 7px; width: 220px; padding: 12px; border: 1px solid #cbd4e1; border-radius: 9px; background: white; box-shadow: 0 8px 24px #17203322; }
+    .add-form[hidden] { display: none; }
+    svg { display: block; width: 100%; height: min(58vh, 590px); min-height: 390px; touch-action: none; background-image: radial-gradient(#dce3ee 1px, transparent 1px); background-size: 20px 20px; }
+    .edge { stroke: #8c9bb2; stroke-width: 2; fill: none; }
+    .edge-hit { stroke: transparent; stroke-width: 20; fill: none; cursor: pointer; }
+    .edge-selected { stroke: #d54d65; stroke-width: 3; }
+    .node { cursor: pointer; }
+    .node rect { fill: white; stroke: #aab8ca; stroke-width: 1.5; }
+    .node.selected rect { stroke: #304fc4; stroke-width: 3; }
+    .node.undocumented rect { stroke: #b58431; stroke-dasharray: 6 4; }
+    .node text { fill: #172033; font-size: 14px; pointer-events: none; }
+    .node .caption { fill: #64748b; font-size: 11px; }
+    .port { fill: #304fc4; stroke: white; stroke-width: 2; cursor: crosshair; }
+    .hint { margin: 10px 0 0; color: #526179; }
+    .message { color: #304fc4; min-height: 24px; font-weight: 600; }
+    aside { padding: 18px; border-left: 1px solid #dfe5ef; background: white; }
+    aside h2 { font-size: 15px; margin: 0 0 8px; }
+    aside h3 { font-size: 13px; margin: 16px 0 4px; }
+    aside p { color: #526179; margin: 5px 0 10px; }
+    .card { border: 1px solid #dfe5ef; border-radius: 9px; padding: 12px; margin-bottom: 13px; }
+    .stack { display: grid; gap: 7px; }
+    .row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .state-list { margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
+    .walkthrough { display: none; }
+    .walkthrough.visible { display: block; }
+    .walkthrough button { display: block; width: 100%; text-align: left; margin-top: 6px; }
+    .badge { display: inline-block; font-size: 11px; font-weight: 700; color: #815000; background: #fff1c8; border-radius: 5px; padding: 2px 6px; vertical-align: 2px; margin-left: 6px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } aside { border-left: 0; border-top: 1px solid #dfe5ef; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Graph editing <span class="badge">THROWAWAY PROTOTYPE</span></h1>
+    <p>Which way of creating and changing dependencies feels most natural? Try the three interaction styles; nothing here saves or changes a real Document. Drafts, undo, properties and export are deliberately outside this demo.</p>
+  </header>
+  <div class="layout">
+    <section class="workspace" aria-label="Graph workspace">
+      <div class="toolbar">
+        <button id="view-mode">View</button><button id="edit-mode">Edit</button>
+        <label for="strategy">Connect by</label>
+        <select id="strategy">
+          <option value="drop">A · Drop onto node</option>
+          <option value="ports">B · Drag between handles</option>
+          <option value="pick">C · Pick two nodes</option>
+        </select>
+        <button id="add">Add Entity</button>
+        <button id="connect">Connect</button>
+        <button id="reset">Reset example</button>
+        <span class="spacer"></span><span id="mode-label"></span>
+      </div>
+      <div class="canvas">
+        <svg id="graph" viewBox="0 0 1000 550" role="group" aria-label="Example dependency graph">
+          <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#8c9bb2"></path></marker></defs>
+          <g id="edges"></g><g id="nodes"></g><line id="preview" stroke="#304fc4" stroke-width="2" stroke-dasharray="6 4" visibility="hidden"></line>
+        </svg>
+        <form id="add-form" class="add-form" hidden>
+          <label for="new-name">New Entity name</label>
+          <input id="new-name" autocomplete="off">
+          <div class="row"><button type="submit">Add</button><button type="button" id="cancel-add">Cancel</button></div>
+        </form>
+      </div>
+      <p class="hint" id="hint"></p>
+      <p class="message" id="message" role="status"></p>
+    </section>
+    <aside>
+      <div class="card">
+        <h2>Selected item</h2>
+        <div id="selection"></div>
+      </div>
+      <div class="card">
+        <h2>Current Document</h2>
+        <p>Arrows point from a dependency to the Entity that needs it.</p>
+        <ul id="state" class="state-list"></ul>
+      </div>
+      <div class="card">
+        <h2>Try a walkthrough</h2>
+        <p>Each walkthrough resets the example. Press the steps in order, or explore freely on the graph.</p>
+        <div class="row"><button data-scenario="happy">Create</button><button data-scenario="cycle">Cycle</button><button data-scenario="remove">Remove</button></div>
+        <div id="walkthrough"></div>
+      </div>
+    </aside>
+  </div>
+  <script>
+    // The prototype keeps Document transitions independent of the page and in memory.
+    const Model = (() => {
+      const initial = () => ({
+        entities: [
+          { name: 'raw.orders', description: 'Incoming orders', dependencies: [], x: 100, y: 170 },
+          { name: 'model.orders', description: 'Cleaned orders', dependencies: ['raw.orders'], x: 390, y: 170 },
+          { name: 'report.sales', description: 'Sales reporting', dependencies: ['model.orders'], x: 680, y: 170 }
+        ]
+      });
+      function dispatch(state, action) {
+        const entities = state.entities.map(entity => ({ ...entity, dependencies: [...entity.dependencies] }));
+        const find = name => entities.find(entity => entity.name === name);
+        const failure = message => ({ state, message });
+        if (action.type === 'add') {
+          if (!action.name || action.name.trim() !== action.name) return failure('Use a nonblank name without surrounding spaces.');
+          const existing = find(action.name);
+          if (existing && !existing.undocumented) return failure('That Entity already exists.');
+          if (existing) {
+            existing.undocumented = false;
+            return { state: { entities }, message: `Documented ${action.name}.` };
+          }
+          entities.push({ name: action.name, description: '', dependencies: [], x: action.x ?? 400, y: action.y ?? 360 });
+          return { state: { entities }, message: `Added ${action.name}.` };
+        }
+        if (action.type === 'connect') {
+          const target = find(action.target);
+          if (!find(action.source) || !target) return failure('Choose two existing Entities.');
+          if (target.undocumented) return failure('Document the Entity before adding its dependencies.');
+          if (target.dependencies.includes(action.source)) return failure('That Direct dependency already exists.');
+          const reaches = (name, destination, seen = new Set()) => {
+            if (name === destination) return true;
+            if (seen.has(name)) return false;
+            seen.add(name);
+            return (find(name)?.dependencies || []).some(next => reaches(next, destination, seen));
+          };
+          if (reaches(action.source, action.target)) return failure('That connection would create a cycle.');
+          target.dependencies.push(action.source);
+          return { state: { entities }, message: `${action.target} now depends on ${action.source}.` };
+        }
+        if (action.type === 'disconnect') {
+          const target = find(action.target);
+          if (!target) return failure('Entity not found.');
+          target.dependencies = target.dependencies.filter(name => name !== action.source);
+          return { state: { entities }, message: `Removed the dependency on ${action.source}.` };
+        }
+        if (action.type === 'rename') {
+          if (!action.name || action.name.trim() !== action.name) return failure('Use a nonblank name without surrounding spaces.');
+          if (find(action.name) && action.name !== action.oldName) return failure('That name is already in use.');
+          const entity = find(action.oldName);
+          if (!entity) return failure('Entity not found.');
+          entity.name = action.name;
+          entities.forEach(item => { item.dependencies = item.dependencies.map(name => name === action.oldName ? action.name : name); });
+          return { state: { entities }, message: `Renamed ${action.oldName} to ${action.name}.` };
+        }
+        if (action.type === 'describe') {
+          const entity = find(action.name);
+          if (!entity || entity.undocumented) return failure('Document the Entity before changing its description.');
+          entity.description = action.description;
+          return { state: { entities }, message: `Updated the description of ${action.name}.` };
+        }
+        if (action.type === 'remove') {
+          const entity = find(action.name);
+          if (!entity) return failure('Entity not found.');
+          if (!entity.undocumented && action.keepReferences && entities.some(item => item.dependencies.includes(action.name))) {
+            entity.undocumented = true;
+            entity.description = '';
+            entity.dependencies = [];
+          } else {
+            entities.splice(entities.indexOf(entity), 1);
+            entities.forEach(item => { item.dependencies = item.dependencies.filter(name => name !== action.name); });
+          }
+          return { state: { entities }, message: `Removed ${action.name}${action.keepReferences ? ' (references retained when present)' : ' and its references'}.` };
+        }
+        return failure('Unknown action.');
+      }
+      return { initial, dispatch };
+    })();
+  </script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = $('graph');
+    let state = Model.initial(), mode = 'edit', selected = null, edge = null, connectSource = null, drag = null, canvasStart = null, addPosition = null;
+    let strategy = new URLSearchParams(location.search).get('variant') || 'drop';
+    if (!['drop', 'ports', 'pick'].includes(strategy)) strategy = 'drop';
+    $('strategy').value = strategy;
+    const hints = {
+      drop: 'Drag a dependency onto the LEFT half of the Entity that needs it. Click empty space to add an Entity. Select a line to remove it.',
+      ports: 'Drag the right handle of a dependency to the left handle of the Entity that needs it. Drag a node body to reposition it.',
+      pick: 'Select Connect, then choose the dependency and the Entity that needs it. You can also use keyboard-activated node buttons.'
+    };
+    function element(tag, attributes = {}) {
+      const node = document.createElementNS(svgNS, tag);
+      Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+      return node;
+    }
+    function point(event) {
+      const p = svg.createSVGPoint(); p.x = event.clientX; p.y = event.clientY;
+      return p.matrixTransform(svg.getScreenCTM().inverse());
+    }
+    function apply(action) {
+      const result = Model.dispatch(state, action);
+      state = result.state;
+      $('message').textContent = result.message;
+      render();
+    }
+    function button(label, fn, disabled = false) {
+      const el = document.createElement('button'); el.textContent = label; el.disabled = disabled; el.onclick = fn; return el;
+    }
+    function render() {
+      $('view-mode').classList.toggle('active', mode === 'view');
+      $('edit-mode').classList.toggle('active', mode === 'edit');
+      $('mode-label').textContent = mode === 'view' ? 'Read-only view' : 'Editing example';
+      $('hint').textContent = mode === 'view' ? 'Select an Entity or a relationship to inspect it. Switch to Edit to make changes.' : hints[strategy];
+      $('add').disabled = mode !== 'edit';
+      $('connect').disabled = mode !== 'edit';
+      $('connect').classList.toggle('active', !!connectSource);
+      $('edges').replaceChildren(); $('nodes').replaceChildren(); $('state').replaceChildren();
+      state.entities.forEach(target => target.dependencies.forEach(sourceName => {
+        const source = state.entities.find(item => item.name === sourceName);
+        if (!source) return;
+        const x1 = source.x + 190, y1 = source.y + 35, x2 = target.x, y2 = target.y + 35;
+        const d = `M ${x1} ${y1} C ${x1 + 70} ${y1}, ${x2 - 70} ${y2}, ${x2} ${y2}`;
+        const line = element('path', { d, class: edge?.source === sourceName && edge?.target === target.name ? 'edge edge-selected' : 'edge', 'marker-end': 'url(#arrow)' });
+        const hit = element('path', { d, class: 'edge-hit', role: 'button', tabindex: '0', 'aria-label': `${target.name} depends on ${sourceName}` });
+        const selectEdge = () => { edge = { source: sourceName, target: target.name }; selected = null; render(); };
+        hit.addEventListener('click', selectEdge);
+        hit.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectEdge(); } });
+        $('edges').append(line, hit);
+      }));
+      state.entities.forEach(entity => {
+        const group = element('g', { transform: `translate(${entity.x} ${entity.y})`, class: `node${selected === entity.name ? ' selected' : ''}${entity.undocumented ? ' undocumented' : ''}`, 'data-node': entity.name, tabindex: '0', role: 'button', 'aria-label': entity.name });
+        group.append(element('rect', { width: '190', height: '70', rx: '10' }));
+        const title = element('text', { x: '15', y: '29' }); title.textContent = entity.name; group.append(title);
+        const caption = element('text', { x: '15', y: '49', class: 'caption' }); caption.textContent = entity.undocumented ? 'Undocumented dependency' : 'Entity'; group.append(caption);
+        if (mode === 'edit' && strategy === 'ports') {
+          group.append(element('circle', { cx: '0', cy: '35', r: '7', class: 'port', 'data-port': 'in' }));
+          group.append(element('circle', { cx: '190', cy: '35', r: '7', class: 'port', 'data-port': 'out' }));
+        }
+        group.addEventListener('pointerdown', event => startDrag(event, entity));
+        group.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(entity.name); } });
+        $('nodes').append(group);
+        const item = document.createElement('li');
+        item.textContent = `${entity.name}${entity.undocumented ? ' (undocumented)' : ''} → depends on: ${entity.dependencies.join(', ') || 'nothing'}`;
+        $('state').append(item);
+      });
+      const selection = $('selection'); selection.replaceChildren();
+      if (edge) {
+        const p = document.createElement('p'); p.textContent = `${edge.target} depends on ${edge.source}.`; selection.append(p);
+        selection.append(button('Remove dependency', () => { const old = edge; edge = null; apply({ type: 'disconnect', ...old }); }, mode !== 'edit'));
+      } else if (selected) {
+        const entity = state.entities.find(item => item.name === selected);
+        if (!entity) { selected = null; render(); return; }
+        const p = document.createElement('p'); p.textContent = entity.description || (entity.undocumented ? 'Undocumented Entity' : 'No description'); selection.append(p);
+        const input = document.createElement('input'); input.value = entity.name; input.setAttribute('aria-label', 'Entity name'); input.disabled = mode !== 'edit'; selection.append(input);
+        selection.append(button('Rename', () => {
+          const oldName = selected, oldState = state;
+          apply({ type: 'rename', oldName, name: input.value });
+          if (state !== oldState) selected = input.value;
+          render();
+        }, mode !== 'edit'));
+        if (!entity.undocumented) {
+          const description = document.createElement('input'); description.value = entity.description; description.setAttribute('aria-label', 'Description'); description.disabled = mode !== 'edit'; selection.append(description);
+          selection.append(button('Update description', () => apply({ type: 'describe', name: selected, description: description.value }), mode !== 'edit'));
+        }
+        selection.append(button('Remove Entity', () => {
+          if (!confirm(`Remove ${selected}?`)) return;
+          const referenced = state.entities.some(item => item.dependencies.includes(selected));
+          const keepReferences = !entity.undocumented && referenced && confirm('Keep references as an undocumented dependency? Choose Cancel to remove references too.');
+          const name = selected; selected = null; apply({ type: 'remove', name, keepReferences });
+        }, mode !== 'edit'));
+      } else {
+        const p = document.createElement('p'); p.textContent = 'Select an Entity or a relationship.'; selection.append(p);
+      }
+    }
+    function choose(name) {
+      if (mode === 'edit' && connectSource !== null) {
+        if (connectSource === '') { connectSource = name; $('message').textContent = `Now choose the Entity that depends on ${name}.`; render(); }
+        else { const source = connectSource; connectSource = null; apply({ type: 'connect', source, target: name }); }
+        return;
+      }
+      selected = name; edge = null; render();
+    }
+    function startDrag(event, entity) {
+      if (event.button !== 0) return;
+      const start = point(event);
+      const port = event.target.getAttribute('data-port');
+      drag = { name: entity.name, start, x: entity.x, y: entity.y, port, moved: false };
+      svg.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+    svg.addEventListener('pointerdown', event => {
+      if (event.target === svg && mode === 'edit') canvasStart = { x: event.clientX, y: event.clientY };
+    });
+    svg.addEventListener('pointermove', event => {
+      if (!drag) return;
+      const p = point(event);
+      if (Math.hypot(p.x - drag.start.x, p.y - drag.start.y) > 8) drag.moved = true;
+      if (!drag.moved || mode !== 'edit') return;
+      const drawing = strategy === 'drop' || (strategy === 'ports' && drag.port === 'out');
+      if (drawing) {
+        const preview = $('preview'); preview.setAttribute('x1', drag.x + 190); preview.setAttribute('y1', drag.y + 35); preview.setAttribute('x2', p.x); preview.setAttribute('y2', p.y); preview.setAttribute('visibility', 'visible');
+      } else if (!drag.port) {
+        const group = [...$('nodes').children].find(item => item.getAttribute('data-node') === drag.name);
+        group?.setAttribute('transform', `translate(${drag.x + p.x - drag.start.x} ${drag.y + p.y - drag.start.y})`);
+      }
+    });
+    svg.addEventListener('pointerup', event => {
+      if (!drag) {
+        if (canvasStart && mode === 'edit' && Math.hypot(event.clientX - canvasStart.x, event.clientY - canvasStart.y) < 8) {
+          const p = point(event); showAddForm(p.x, p.y);
+        }
+        canvasStart = null;
+        return;
+      }
+      const current = drag; drag = null; $('preview').setAttribute('visibility', 'hidden');
+      if (!current.moved || mode !== 'edit') { choose(current.name); return; }
+      const p = point(event);
+      const target = state.entities.find(item => p.x >= item.x && p.x <= item.x + 190 && p.y >= item.y && p.y <= item.y + 70);
+      if (strategy === 'drop') {
+        if (target && p.x <= target.x + 95) apply({ type: 'connect', source: current.name, target: target.name });
+        else { $('message').textContent = 'Drop onto the left half of an Entity to connect it.'; render(); }
+      } else if (strategy === 'ports' && current.port === 'out') {
+        if (target && Math.hypot(p.x - target.x, p.y - target.y - 35) <= 24) apply({ type: 'connect', source: current.name, target: target.name });
+        else { $('message').textContent = 'Drop onto the left handle of the Entity that needs it.'; render(); }
+      } else if (!current.port) {
+        const entity = state.entities.find(item => item.name === current.name);
+        entity.x = Math.max(0, Math.min(810, current.x + p.x - current.start.x));
+        entity.y = Math.max(0, Math.min(480, current.y + p.y - current.start.y));
+        $('message').textContent = 'Position changed only in this demo; positions are not saved.'; render();
+      }
+    });
+    svg.addEventListener('pointercancel', () => { drag = null; canvasStart = null; $('preview').setAttribute('visibility', 'hidden'); render(); });
+    function showAddForm(x = 495, y = 395) {
+      addPosition = { x: Math.max(0, Math.min(810, x - 95)), y: Math.max(0, Math.min(480, y - 35)) };
+      const bounds = svg.getBoundingClientRect();
+      const location = svg.createSVGPoint(); location.x = x; location.y = y;
+      const screen = location.matrixTransform(svg.getScreenCTM());
+      $('add-form').style.left = `${Math.max(0, Math.min(bounds.width - 220, screen.x - bounds.left))}px`;
+      $('add-form').style.top = `${Math.max(0, Math.min(bounds.height - 110, screen.y - bounds.top))}px`;
+      $('add-form').hidden = false; $('new-name').value = ''; $('new-name').focus();
+    }
+    $('add-form').onsubmit = event => {
+      event.preventDefault();
+      const oldState = state;
+      apply({ type: 'add', name: $('new-name').value, ...addPosition });
+      if (state !== oldState) $('add-form').hidden = true;
+    };
+    $('cancel-add').onclick = () => { $('add-form').hidden = true; };
+    $('add').onclick = () => showAddForm();
+    $('connect').onclick = () => { connectSource = connectSource === null ? '' : null; $('message').textContent = connectSource === null ? 'Connection cancelled.' : 'Choose the dependency first, then the Entity that needs it.'; render(); };
+    $('view-mode').onclick = () => { mode = 'view'; connectSource = null; $('add-form').hidden = true; render(); };
+    $('edit-mode').onclick = () => { mode = 'edit'; render(); };
+    $('strategy').onchange = event => {
+      strategy = event.target.value; connectSource = null;
+      const url = new URL(location.href); url.searchParams.set('variant', strategy); history.replaceState(null, '', url);
+      $('message').textContent = 'Interaction style changed; the example Document is unchanged.'; render();
+    };
+    $('reset').onclick = reset;
+    function reset() { state = Model.initial(); mode = 'edit'; selected = null; edge = null; connectSource = null; $('add-form').hidden = true; $('message').textContent = 'Example reset.'; render(); }
+    const scenarios = {
+      happy: { description: 'Create a new source, then make the report depend on it.', steps: [
+        ['Add raw.refunds', { type: 'add', name: 'raw.refunds', x: 100, y: 360 }],
+        ['Connect raw.refunds to report.sales', { type: 'connect', source: 'raw.refunds', target: 'report.sales' }]
+      ] },
+      cycle: { description: 'Try to make the existing upstream source depend on the downstream report.', steps: [
+        ['Try report.sales → raw.orders', { type: 'connect', source: 'report.sales', target: 'raw.orders' }]
+      ] },
+      remove: { description: 'Remove an Entity but keep its references as an undocumented dependency.', steps: [
+        ['Remove model.orders, keeping references', { type: 'remove', name: 'model.orders', keepReferences: true }]
+      ] }
+    };
+    document.querySelectorAll('[data-scenario]').forEach(tab => tab.onclick = () => {
+      reset();
+      const scenario = scenarios[tab.dataset.scenario], container = $('walkthrough');
+      container.replaceChildren();
+      const p = document.createElement('p'); p.textContent = scenario.description; container.append(p);
+      const controls = scenario.steps.map(([label, action], index) => {
+        const el = button(`${index + 1}. ${label}`, () => {
+          apply(action); el.disabled = true; if (controls[index + 1]) controls[index + 1].disabled = false;
+        }, index !== 0);
+        container.append(el); return el;
+      });
+    });
+    render();
+  </script>
+</body>
+</html>
