@@ -5,7 +5,7 @@ const { parseDocument, deriveGraph } = require('./data');
 const { createDocumentSession } = require('./document-session');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
-const { setupColourSettings } = require('./colour-settings');
+const { setupColourSettings, writeColourSettings } = require('./colour-settings');
 const { setupImageExport } = require('./export-image');
 cytoscape.use(dagre);
 
@@ -20,6 +20,20 @@ let resizeGraph = () => {};
 let selection = 0;
 let session = null;
 let documentName = 'dependency-document.json';
+let colourControls;
+let displayedGraph;
+
+function setupDocumentColours(graph) {
+  colourControls = setupColourSettings(document, graph, {
+    data: JSON.parse(session.current()),
+    change(enabled, rules) {
+      const data = JSON.parse(session.current());
+      session.replace(JSON.stringify(writeColourSettings(data, enabled, rules)));
+      updateDocumentControls();
+      document.getElementById('document-status').textContent = '';
+    },
+  });
+}
 
 function openDocument(raw, name) {
   let nextDocument;
@@ -48,6 +62,7 @@ function renderGraph(graph) {
   cleanupGraph();
   document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
   document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
+  displayedGraph = JSON.stringify(graph);
   filePanel.hidden = graph.entities.length > 0;
   document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
   if (graph.entities.length) cleanupGraph = showGraph(graph);
@@ -55,6 +70,7 @@ function renderGraph(graph) {
     cleanupGraph = () => {};
     resizeGraph = () => {};
     document.getElementById('status').textContent = 'No entities in this dependency dataset.';
+    setupDocumentColours({ nodes: () => [] });
   }
 }
 
@@ -75,8 +91,16 @@ function refreshDocument() {
   updateDocumentControls();
   document.getElementById('document-error').textContent = '';
   document.getElementById('document-status').textContent = '';
-  renderGraph(deriveGraph(parseDocument(session.current())));
+  const graph = deriveGraph(parseDocument(session.current()));
+  if (JSON.stringify(graph) === displayedGraph) colourControls.update(JSON.parse(session.current()));
+  else renderGraph(graph);
 }
+
+document.getElementById('settings-entry').addEventListener('click', () => {
+  const panel = document.getElementById('colour-settings');
+  panel.open = true;
+  panel.querySelector('summary').focus();
+});
 
 document.getElementById('document-json').addEventListener('input', (event) => {
   session.setDraft(event.target.value);
@@ -257,7 +281,7 @@ function showGraph(data) {
   });
   resizeGraph = () => graph.resize();
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
-  setupColourSettings(document, graph);
+  setupDocumentColours(graph);
   const imageExport = setupImageExport(window, document, graph);
   const entities = new Map(data.entities.map((entity) => [entity.name, entity]));
   const downstream = new Map(data.entities.map((entity) => [entity.name, []]));

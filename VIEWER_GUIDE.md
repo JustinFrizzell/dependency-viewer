@@ -9,7 +9,7 @@ npm run test:dependency
 npm run typecheck
 ```
 
-The build writes `dist/dependency-viewer.html`, with scripts and styles embedded. Open it directly with `file://`, without a server or network, then choose a JSON file or paste JSON and select **Open pasted JSON**. The Document is read locally in the browser and is not retained after a refresh. Opening a valid Document replaces the graph and resets all view settings, including when selecting the same file again. The file toolbar stays open when there are no entities and collapses when a graph is loaded. Use **File** beside **Downstream** to reopen the toolbar. Invalid or unreadable input shows an error without changing the open Document. Expand **JSON format and example** for format guidance and a copyable example.
+The build writes `dist/dependency-viewer.html`, with scripts and styles embedded. Open it directly with `file://`, without a server or network, then choose a JSON file or paste JSON and select **Open pasted JSON**. The Document is read locally in the browser and is not retained after a refresh. Opening a valid Document replaces the graph and resets transient view state, including when selecting the same file again. The file toolbar stays open when there are no entities and collapses when a graph is loaded. Use **File** beside **Downstream** to reopen the toolbar. Invalid or unreadable input shows an error without changing the open Document. Expand **JSON format and example** for format guidance and a copyable example.
 
 Expand **Opened Document** to edit the JSON and apply or discard the draft. Invalid drafts cannot replace the Document or be copied or downloaded. Apply is one undoable change; **Undo** and **Redo** operate within the current session, and opening another Document resets history. An unapplied draft must be applied or discarded before other Document edits. Unknown properties and repeated dependency entries are retained; undocumented graph nodes are not added as Entity records. Whitespace may change. The viewer rejects duplicate object keys and numbers that cannot round-trip accurately; store such numbers as strings if needed.
 
@@ -21,7 +21,9 @@ After selecting an entity, use **Upstream**, **Downstream**, or **Connected** to
 
 Use **Filter entity names** beside the dependency views to show only entities whose full names contain the entered text, ignoring case and surrounding whitespace. It filters the current view and hides relationships to hidden entities; the graph fits the remaining entities as you type. Switching views keeps the filter, while clearing it restores the current view. A hidden selected entity remains the view's anchor. Selecting a nonmatching entity from the Entities list or details panel clears the filter. The filter starts empty on reload.
 
-Use **Colours** to colour entities whose full names contain a rule's text, ignoring case. The first matching rule wins; use the arrows to change priority. Bronze, silver, and gold are enabled by default, with three more colours available. Blank rules are ignored. Toggle colouring off or use **Reset** to restore the default rules and order. Changes last until the page is reloaded; undocumented and selection borders remain visible.
+Use **Settings** in **Opened Document**, or expand **Colours** on the graph, to colour entities whose full names contain a rule's text, ignoring case. The first matching rule wins; use the arrows to change priority. Bronze, silver, and gold are enabled by default, with three more colours available. Blank rules are ignored. Toggle colouring off or use **Reset** to restore the default rules and order. Changes are undoable Document edits and appear in copied or downloaded JSON; apply or discard a JSON draft first. Undocumented and selection borders remain visible. Selection, filters, dependency view and dragged positions are not saved.
+
+Non-default colour settings use `settings.colours`: `enabled` (boolean), `order` (the colour names in priority order), and `texts` (changed match text keyed by colour name). Omitted values use current defaults, and reset removes colour overrides. Other `settings` properties are preserved. If `settings` or `settings.colours` contains incompatible existing data, the viewer preserves it, explains the conflict, and disables colour editing until the JSON is resolved.
 
 Collapse **Entity details** at the bottom to give the graph more room; expand it again to see the current selection.
 
@@ -67,6 +69,7 @@ On an isolated macOS test environment where networking can safely be disabled, o
 - Inspect the left-to-right edges from `DB.Raw` through `table_4`. Select **Upstream**, **Downstream**, and **Connected**, including a four-edge path; change the selection while filtered. Select **All** and verify the full graph returns with the selection retained.
 - Verify the edges use rounded orthogonal paths with moving dashes. Pause and resume edge motion, then confirm it remains disabled when the browser requests reduced motion.
 - Drag to pan, zoom using the wheel and buttons, and reset to fit. Collapse and reopen the entity list.
+- Open **Settings**, edit and reorder colour rules, download the Document and reopen the downloaded file. Verify colours and priority return, then reset and verify the overrides are removed.
 - Select `dist/dependency-acceptance-empty.json` and verify the empty state. Refresh and verify that the viewer asks for a file again.
 
 Edge on Windows is not an MVP release gate.
