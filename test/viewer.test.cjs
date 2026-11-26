@@ -1266,6 +1266,105 @@ test('download, undo and copy reflect saved state; replacement and leaving prote
   }
 });
 
+test('Entity drafts block saving and selection until applied or discarded', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const input = document.getElementById('edit-entity-name');
+    input.value = 'B';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    assert.equal(document.getElementById('download-document').disabled, true);
+    assert.match(document.getElementById('document-status').textContent, /apply or discard/i);
+    document.getElementById('inspector').open = false;
+    document.querySelector('#entity-results button[title="B"]').click();
+    assert.equal(document.getElementById('edit-entity-name').value, 'B');
+    assert.match(document.getElementById('edit-entity-error').textContent, /apply or discard/i);
+    assert.equal(document.getElementById('inspector').open, true);
+    document.getElementById('discard-entity-draft').click();
+    assert.equal(document.getElementById('download-document').disabled, false);
+    document.querySelector('#entity-results button[title="B"]').click();
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'B');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('Direct dependency drafts remain accessible and block saving and other edits', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":["B"]},{"name":"B","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const input = document.getElementById('new-dependency-name');
+    input.value = ' B';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    assert.equal(document.getElementById('download-document').disabled, true);
+    document.querySelector('#entity-results button[title="B"]').click();
+    assert.equal(document.getElementById('new-dependency-name').value, ' B');
+    assert.match(document.getElementById('dependency-error').textContent, /apply or discard/i);
+    document.querySelector('button[aria-label="Remove Direct dependency B"]').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0].dependencies, ['B']);
+    document.getElementById('discard-dependency-draft').click();
+    assert.equal(document.getElementById('download-document').disabled, false);
+    document.querySelector('#entity-results button[title="B"]').click();
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'B');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('new Entity drafts block saving and survive graph edits until discarded', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    const input = document.getElementById('new-entity-name');
+    input.value = ' invalid ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    assert.equal(document.getElementById('download-document').disabled, true);
+    document.querySelector('#entity-results button[title="A"]').click();
+    document
+      .querySelector('#add-dependency-form')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    assert.match(document.getElementById('dependency-error').textContent, /apply or discard/i);
+    assert.equal(input.value, ' invalid ');
+    document.getElementById('discard-new-entity-draft').click();
+    assert.equal(document.getElementById('download-document').disabled, false);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('rejected empty form drafts warn on replacement and block saving until discarded', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    document
+      .getElementById('add-dependency-form')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    assert.match(document.getElementById('dependency-error').textContent, /nonblank/i);
+    assert.equal(document.getElementById('download-document').disabled, true);
+    const leave = new Event('beforeunload', { cancelable: true });
+    dom.window.dispatchEvent(leave);
+    assert.equal(leave.defaultPrevented, true);
+    let warned = false;
+    dom.window.confirm = () => {
+      warned = true;
+      return false;
+    };
+    loadFile(dom, '{"entities":[]}');
+    assert.equal(warned, true);
+    assert.match(document.getElementById('graph-summary').textContent, /A/);
+    document.getElementById('discard-dependency-draft').click();
+    document.getElementById('add-entity-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(document.getElementById('download-document').disabled, true);
+    document.getElementById('discard-new-entity-draft').click();
+    assert.equal(document.getElementById('download-document').disabled, false);
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('Entity and Direct dependency editors keep validation and history independent', () => {
   const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}' });
   try {
@@ -1277,7 +1376,7 @@ test('Entity and Direct dependency editors keep validation and history independe
     submit('edit-entity-form');
     assert.match(document.getElementById('edit-entity-error').textContent, /already exists/i);
     submit('add-dependency-form');
-    assert.match(document.getElementById('dependency-error').textContent, /nonblank/i);
+    assert.match(document.getElementById('dependency-error').textContent, /apply or discard/i);
     assert.match(document.getElementById('edit-entity-error').textContent, /already exists/i);
     document.getElementById('edit-entity-name').value = 'Renamed';
     submit('edit-entity-form');
@@ -1407,6 +1506,7 @@ test('an unapplied JSON draft blocks adding and removing Direct dependencies', (
     assert.match(document.getElementById('graph-summary').textContent, /B → A/);
     document.getElementById('discard-document').click();
     assert.equal(document.getElementById('dependency-error').textContent, '');
+    document.getElementById('discard-dependency-draft').click();
     document.querySelector('button[aria-label="Remove Direct dependency B"]').click();
     assert.deepEqual(JSON.parse(editor.value).entities[0].dependencies, []);
   } finally {
@@ -1539,8 +1639,10 @@ test('an unapplied JSON draft blocks adding an Entity until the draft is resolve
     assert.match(document.getElementById('add-entity-error').textContent, /apply or discard.*draft/i);
     assert.equal(editor.value, '{"entities":[{"name":"B","dependencies":[]}]}');
     assert.match(document.getElementById('graph-summary').textContent, /A/);
+    document.getElementById('discard-new-entity-draft').click();
     document.getElementById('apply-document').click();
     assert.equal(document.getElementById('add-entity-error').textContent, '');
+    document.getElementById('new-entity-name').value = 'C';
     submit();
     assert.deepEqual(
       JSON.parse(editor.value).entities.map((entity) => entity.name),

@@ -3,6 +3,7 @@ const cytoscape = require('cytoscape');
 const dagre = require('cytoscape-dagre');
 const { parseDocument, deriveGraph } = require('./data');
 const { createDocumentSession } = require('./document-session');
+const documentEdits = require('./document-edits');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings, writeColourSettings } = require('./colour-settings');
@@ -33,21 +34,39 @@ const metadataError = document.getElementById('metadata-error');
 let metadataBaseline = ['', ''];
 let metadataKeys = [];
 let metadataRejected = false;
+let entityDraft = null;
+let dependencyDraft = null;
+let newEntityRejected = false;
 const hasMetadataDraft = () =>
   metadataRejected || metadataKey.value !== metadataBaseline[0] || metadataValue.value !== metadataBaseline[1];
-const isUnsaved = () => session && (session.isUnsaved() || hasMetadataDraft());
-function requireNoMetadataDraft() {
-  if (hasMetadataDraft()) throw new Error('Apply or discard the property draft before editing the Document.');
+const hasEntityDraft = () => entityDraft && entityDraft.changed();
+const hasDependencyDraft = () => dependencyDraft && dependencyDraft.changed();
+const hasNewEntityDraft = () =>
+  newEntityRejected ||
+  document.getElementById('new-entity-name').value !== '' ||
+  document.getElementById('new-entity-description').value !== '';
+const isUnsaved = () =>
+  session &&
+  (session.isUnsaved() || hasMetadataDraft() || hasEntityDraft() || hasDependencyDraft() || hasNewEntityDraft());
+function requireNoConflictingFormDraft(owner) {
+  if (owner !== 'property' && hasMetadataDraft())
+    throw new Error('Apply or discard the property draft before editing the Document.');
+  if (owner !== 'entity' && hasEntityDraft())
+    throw new Error('Apply or discard the Entity draft before editing the Document.');
+  if (owner !== 'dependency' && hasDependencyDraft())
+    throw new Error('Apply or discard the Direct dependency draft before editing the Document.');
+  if (owner !== 'new-entity' && hasNewEntityDraft())
+    throw new Error('Apply or discard the new Entity draft before editing the Document.');
 }
 let colourControls;
 let presentationControls;
 let displayedGraph;
 
-function setupDocumentColours(graph) {
+function setupDocumentSettings(graph) {
   colourControls = setupColourSettings(document, graph, {
     data: JSON.parse(session.current()),
     change(enabled, rules) {
-      requireNoMetadataDraft();
+      requireNoConflictingFormDraft();
       const data = JSON.parse(session.current());
       session.replace(JSON.stringify(writeColourSettings(data, enabled, rules)));
       updateDocumentControls();
@@ -57,7 +76,7 @@ function setupDocumentColours(graph) {
   presentationControls = setupPresentationSettings(document, graph, {
     data: JSON.parse(session.current()),
     change(state) {
-      requireNoMetadataDraft();
+      requireNoConflictingFormDraft();
       const data = JSON.parse(session.current());
       session.replace(JSON.stringify(writePresentationSettings(data, state)));
       updateDocumentControls();
@@ -78,12 +97,15 @@ function openDocument(raw, name) {
   }
   if (isUnsaved() && !window.confirm('Replace the Document and lose unsaved changes and drafts?')) return;
   session = createDocumentSession(nextDocument);
+  entityDraft = null;
+  dependencyDraft = null;
+  newEntityRejected = false;
   documentName = name;
+  document.getElementById('add-entity-form').reset();
   resetMetadata();
   updateDocumentControls();
   document.getElementById('document-panel').hidden = false;
   document.getElementById('add-entity-panel').hidden = false;
-  document.getElementById('add-entity-form').reset();
   document.getElementById('add-entity-error').textContent = '';
   document.getElementById('document-status').textContent = '';
   document.getElementById('document-error').textContent = '';
@@ -94,6 +116,8 @@ function openDocument(raw, name) {
 
 function renderGraph(graph, selectedName) {
   cleanupGraph();
+  entityDraft = null;
+  dependencyDraft = null;
   document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
   document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
   displayedGraph = JSON.stringify(graph);
@@ -104,23 +128,27 @@ function renderGraph(graph, selectedName) {
     cleanupGraph = () => {};
     resizeGraph = () => {};
     document.getElementById('status').textContent = 'No entities in this dependency dataset.';
-    setupDocumentColours({ nodes: () => [] });
+    setupDocumentSettings({ nodes: () => [] });
   }
 }
 
 function updateDocumentControls() {
   if (!session) return;
   const metadataDraft = hasMetadataDraft();
+  const formDraft = metadataDraft || hasEntityDraft() || hasDependencyDraft() || hasNewEntityDraft();
   const editor = document.getElementById('document-json');
   if (editor.value !== session.draft()) editor.value = session.draft();
-  editor.disabled = metadataDraft;
+  editor.disabled = formDraft;
   document.getElementById('unsaved-indicator').textContent = isUnsaved() ? '— Unsaved changes' : '';
-  document.getElementById('apply-document').disabled = !session.hasDraft() || metadataDraft;
+  document.getElementById('apply-document').disabled = !session.hasDraft() || formDraft;
   document.getElementById('discard-document').disabled = !session.hasDraft();
-  document.getElementById('undo-document').disabled = !session.canUndo() || metadataDraft;
-  document.getElementById('redo-document').disabled = !session.canRedo() || metadataDraft;
-  document.getElementById('download-document').disabled = session.hasDraft() || metadataDraft;
-  document.getElementById('copy-document').disabled = session.hasDraft() || metadataDraft;
+  document.getElementById('undo-document').disabled = !session.canUndo() || formDraft;
+  document.getElementById('redo-document').disabled = !session.canRedo() || formDraft;
+  document.getElementById('download-document').disabled = session.hasDraft() || formDraft;
+  document.getElementById('copy-document').disabled = session.hasDraft() || formDraft;
+  const status = document.getElementById('document-status');
+  if (formDraft) status.textContent = 'Apply or discard the form draft before saving.';
+  else if (status.textContent === 'Apply or discard the form draft before saving.') status.textContent = '';
   metadataEntity.disabled = metadataDraft;
   metadataProperty.disabled = metadataDraft;
   document.getElementById('metadata-discard').disabled = !metadataDraft;
@@ -195,40 +223,24 @@ for (const input of [metadataKey, metadataValue]) {
 document.getElementById('metadata-discard').addEventListener('click', resetMetadataDraft);
 document.getElementById('metadata-form').addEventListener('submit', (event) => {
   event.preventDefault();
+  let validating = false;
   try {
+    requireNoConflictingFormDraft('property');
+    validating = true;
     const name = metadataEntity.value;
-    const data = parseDocument(session.current());
-    const entity = data.entities.find((item) => item.name === name);
-    const key = metadataKey.value;
-    if (['name', 'dependencies', 'description'].includes(key))
-      throw new Error('Required Entity fields cannot be edited as properties.');
-    if (metadataProperty.value === '' && Object.hasOwn(entity, key))
-      throw new Error('This property already exists; select it to change it.');
-    JSON.parse(metadataValue.value);
-    const parsed = parseDocument(
-      `{"entities":[{"name":"validation","dependencies":[],"value":${metadataValue.value}}]}`,
-    );
-    Object.defineProperty(entity, key, {
-      value: parsed.entities[0].value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-    session.replace(JSON.stringify(data));
+    documentEdits.setProperty(session, name, metadataKey.value, metadataValue.value, metadataProperty.value === '');
     refreshDocument(name);
   } catch (error) {
-    metadataRejected = true;
+    if (validating) metadataRejected = true;
     metadataError.textContent = `Error: ${error.message}`;
     updateDocumentControls();
   }
 });
 document.getElementById('metadata-remove').addEventListener('click', () => {
   try {
+    requireNoConflictingFormDraft();
     const name = metadataEntity.value;
-    const data = parseDocument(session.current());
-    const entity = data.entities.find((item) => item.name === name);
-    delete entity[metadataKeys[Number(metadataProperty.value)]];
-    session.replace(JSON.stringify(data));
+    documentEdits.removeProperty(session, name, metadataKeys[Number(metadataProperty.value)]);
     refreshDocument(name);
   } catch (error) {
     metadataError.textContent = `Error: ${error.message}`;
@@ -245,26 +257,32 @@ document.getElementById('add-entity-form').addEventListener('submit', (event) =>
   event.preventDefault();
   const name = document.getElementById('new-entity-name').value;
   const description = document.getElementById('new-entity-description').value;
+  let validating = false;
   try {
-    requireNoMetadataDraft();
-    const documentData = parseDocument(session.current());
-    if (!name || name.trim() !== name)
-      throw new Error('Entity name must be nonblank and have no surrounding whitespace.');
-    if (documentData.entities.some((entity) => entity.name === name))
-      throw new Error('An Entity with this name already exists.');
-    const entity = { name, dependencies: [] };
-    if (description) entity.description = description;
-    documentData.entities.push(entity);
-    session.replace(JSON.stringify(documentData));
+    requireNoConflictingFormDraft('new-entity');
+    if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
+    validating = true;
+    documentEdits.addEntity(session, name, description);
     event.target.reset();
+    newEntityRejected = false;
     document.getElementById('add-entity-error').textContent = '';
     refreshDocument(name);
   } catch (error) {
+    if (validating) newEntityRejected = true;
     document.getElementById('add-entity-error').textContent = `Error: ${error.message}`;
+    updateDocumentControls();
   }
 });
 document.getElementById('add-entity-form').addEventListener('input', () => {
+  newEntityRejected = false;
   document.getElementById('add-entity-error').textContent = '';
+  updateDocumentControls();
+});
+document.getElementById('discard-new-entity-draft').addEventListener('click', () => {
+  document.getElementById('add-entity-form').reset();
+  newEntityRejected = false;
+  document.getElementById('add-entity-error').textContent = '';
+  updateDocumentControls();
 });
 
 document.getElementById('document-json').addEventListener('input', (event) => {
@@ -322,7 +340,15 @@ document.getElementById('copy-document').addEventListener('click', async () => {
 });
 
 document.getElementById('download-document').addEventListener('click', () => {
-  if (!session || session.hasDraft() || hasMetadataDraft()) return;
+  if (
+    !session ||
+    session.hasDraft() ||
+    hasMetadataDraft() ||
+    hasEntityDraft() ||
+    hasDependencyDraft() ||
+    hasNewEntityDraft()
+  )
+    return;
   const url = URL.createObjectURL(new Blob([session.current()], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;
@@ -457,7 +483,7 @@ function showGraph(data, selectedName) {
   });
   resizeGraph = () => graph.resize();
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
-  setupDocumentColours(graph);
+  setupDocumentSettings(graph);
   const imageExport = setupImageExport(window, document, graph);
   const entities = new Map(data.entities.map((entity) => [entity.name, entity]));
   const downstream = new Map(data.entities.map((entity) => [entity.name, []]));
@@ -488,7 +514,7 @@ function showGraph(data, selectedName) {
         button.appendChild(detail);
       }
       button.addEventListener('click', () => {
-        selectEntity(entity.name);
+        if (!selectEntity(entity.name)) return;
         const node = graph.getElementById(ids.get(entity.name));
         if (view !== 'all') {
           const bounds = graph.elements().not('.filtered-out').boundingBox();
@@ -586,6 +612,18 @@ function showGraph(data, selectedName) {
   views.hidden = false;
   updateView(false);
   function selectEntity(name) {
+    if (hasEntityDraft()) {
+      entityDraft.error.textContent = 'Error: Apply or discard the Entity draft before changing selection.';
+      document.getElementById('inspector').open = true;
+      return false;
+    }
+    if (hasDependencyDraft()) {
+      dependencyDraft.error.textContent =
+        'Error: Apply or discard the Direct dependency draft before changing selection.';
+      document.getElementById('inspector').open = true;
+      return false;
+    }
+    dependencyDraft = null;
     const entity = entities.get(name);
     const clearFilter = !name.toLowerCase().includes(filterQuery());
     if (clearFilter) graphFilter.value = '';
@@ -631,32 +669,40 @@ function showGraph(data, selectedName) {
     const error = document.createElement('p');
     error.id = 'edit-entity-error';
     error.setAttribute('role', 'alert');
-    form.append(save, error);
+    const discard = document.createElement('button');
+    discard.type = 'button';
+    discard.id = 'discard-entity-draft';
+    discard.textContent = 'Discard Entity draft';
+    entityDraft = {
+      changed: () =>
+        nameInput.value !== name || (descriptionInput && descriptionInput.value !== (entity.description || '')),
+      error,
+    };
+    discard.addEventListener('click', () => {
+      nameInput.value = name;
+      if (descriptionInput) descriptionInput.value = entity.description || '';
+      error.textContent = '';
+      updateDocumentControls();
+    });
+    form.append(save, discard, error);
     form.addEventListener('input', () => {
       error.textContent = '';
+      updateDocumentControls();
     });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       try {
-        requireNoMetadataDraft();
+        requireNoConflictingFormDraft('entity');
         const newName = nameInput.value;
-        if (!newName || newName.trim() !== newName)
-          throw new Error('Entity name must be nonblank and have no surrounding whitespace.');
-        if (newName !== name && entities.has(newName)) throw new Error('An Entity with this name already exists.');
-        const data = parseDocument(session.current());
-        const record = data.entities.find((item) => item.name === name);
-        if (record) {
-          record.name = newName;
-          if (descriptionInput.value !== (record.description || '')) record.description = descriptionInput.value;
-        }
-        for (const item of data.entities) {
-          item.dependencies = item.dependencies.map((dependency) => (dependency === name ? newName : dependency));
-        }
-        session.replace(JSON.stringify(data));
+        documentEdits.editEntity(session, name, newName, descriptionInput && descriptionInput.value);
+        const previousDraft = entityDraft;
+        entityDraft = null;
         refreshDocument(newName);
+        if (form.isConnected && !entityDraft) entityDraft = previousDraft;
         document.getElementById('edit-entity-name').focus();
       } catch (reason) {
         error.textContent = `Error: ${reason.message}`;
+        updateDocumentControls();
       }
     });
     inspector.appendChild(form);
@@ -682,14 +728,8 @@ function showGraph(data, selectedName) {
     }
     function removeEntity(removeReferences) {
       try {
-        requireNoMetadataDraft();
-        const data = parseDocument(session.current());
-        data.entities = data.entities.filter((item) => item.name !== name);
-        if (removeReferences) {
-          for (const item of data.entities)
-            item.dependencies = item.dependencies.filter((dependency) => dependency !== name);
-        }
-        session.replace(JSON.stringify(data));
+        requireNoConflictingFormDraft();
+        documentEdits.removeEntity(session, name, removeReferences);
         refreshDocument();
         const target = document.getElementById('entity-list').hidden
           ? document.querySelector('#add-entity-panel summary')
@@ -778,22 +818,24 @@ function showGraph(data, selectedName) {
     const dependencyError = document.createElement('p');
     dependencyError.id = 'dependency-error';
     dependencyError.setAttribute('role', 'alert');
-    const removeDependency = entity.documented
-      ? (dependency) => {
-          try {
-            requireNoMetadataDraft();
-            if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
-            const documentData = parseDocument(session.current());
-            const record = documentData.entities.find((item) => item.name === name);
-            record.dependencies = record.dependencies.filter((item) => item !== dependency);
-            session.replace(JSON.stringify(documentData));
-            refreshDocument(name);
-            document.getElementById('new-dependency-name').focus();
-          } catch (problem) {
-            dependencyError.textContent = `Error: ${problem.message}`;
-          }
-        }
-      : null;
+    let dependencyRejected = false;
+    function changeDependency(dependency, add) {
+      let validating = false;
+      try {
+        requireNoConflictingFormDraft(add ? 'dependency' : undefined);
+        if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
+        validating = true;
+        documentEdits.editDependency(session, name, dependency, add);
+        dependencyDraft = null;
+        refreshDocument(name);
+        document.getElementById('new-dependency-name').focus();
+      } catch (problem) {
+        if (add && validating) dependencyRejected = true;
+        dependencyError.textContent = `Error: ${problem.message}`;
+        updateDocumentControls();
+      }
+    }
+    const removeDependency = entity.documented ? (dependency) => changeDependency(dependency, false) : null;
     const dependencies = relationshipSection(
       'Direct dependencies',
       entity.dependencies,
@@ -815,26 +857,26 @@ function showGraph(data, selectedName) {
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.textContent = 'Add dependency';
-      form.append(label, input, submit, dependencyError);
-      form.addEventListener('input', () => (dependencyError.textContent = ''));
+      const discard = document.createElement('button');
+      discard.type = 'button';
+      discard.id = 'discard-dependency-draft';
+      discard.textContent = 'Discard dependency draft';
+      dependencyDraft = { changed: () => dependencyRejected || input.value !== '', error: dependencyError };
+      discard.addEventListener('click', () => {
+        input.value = '';
+        dependencyRejected = false;
+        dependencyError.textContent = '';
+        updateDocumentControls();
+      });
+      form.append(label, input, submit, discard, dependencyError);
+      form.addEventListener('input', () => {
+        dependencyRejected = false;
+        dependencyError.textContent = '';
+        updateDocumentControls();
+      });
       form.addEventListener('submit', (event) => {
         event.preventDefault();
-        try {
-          requireNoMetadataDraft();
-          if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
-          const dependency = input.value;
-          if (!dependency || dependency.trim() !== dependency)
-            throw new Error('Dependency name must be nonblank and have no surrounding whitespace.');
-          const documentData = parseDocument(session.current());
-          const record = documentData.entities.find((item) => item.name === name);
-          if (record.dependencies.includes(dependency)) throw new Error('This Direct dependency already exists.');
-          record.dependencies.push(dependency);
-          session.replace(JSON.stringify(documentData));
-          refreshDocument(name);
-          document.getElementById('new-dependency-name').focus();
-        } catch (problem) {
-          dependencyError.textContent = `Error: ${problem.message}`;
-        }
+        changeDependency(input.value, true);
       });
       dependencies.appendChild(form);
     }
@@ -843,6 +885,7 @@ function showGraph(data, selectedName) {
       relationshipSection('Direct downstream entities', downstream.get(name), 'No downstream entities.'),
     );
     inspector.appendChild(details);
+    return true;
   }
   graph.on('tap', 'node', (event) => selectEntity(event.target.data('name')));
   graph.on('mouseover', 'node', (event) => {
