@@ -122,7 +122,7 @@
         </div>
       </details>
       <details id="colour-settings" open hidden>
-        <summary>Colours</summary>
+        <summary>Settings</summary>
         <div class="colour-settings-content">
           <div class="colour-settings-actions">
             <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
@@ -131,6 +131,13 @@
           <p>Colour entities when their full name contains this text. The first match wins.</p>
           <p id="colour-error" role="alert"></p>
           <div id="colour-rules"></div>
+          <section class="presentation-settings" aria-labelledby="presentation-heading">
+            <h3 id="presentation-heading">Graph presentation</h3>
+            <label><input id="compact-nodes" type="checkbox" /> Compact nodes</label>
+            <label><input id="tooltips-enabled" type="checkbox" checked /> Show hover tooltips</label>
+            <button id="reset-presentation" type="button">Reset presentation</button>
+            <p id="presentation-error" role="alert"></p>
+          </section>
         </div>
       </details>
       <div id="dependency-views" aria-label="Dependency view" hidden>

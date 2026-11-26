@@ -6,6 +6,11 @@ const { createDocumentSession } = require('./document-session');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings, writeColourSettings } = require('./colour-settings');
+const {
+  readPresentationSettings,
+  setupPresentationSettings,
+  writePresentationSettings,
+} = require('./presentation-settings');
 const { setupImageExport } = require('./export-image');
 cytoscape.use(dagre);
 
@@ -35,6 +40,7 @@ function requireNoMetadataDraft() {
   if (hasMetadataDraft()) throw new Error('Apply or discard the property draft before editing the Document.');
 }
 let colourControls;
+let presentationControls;
 let displayedGraph;
 
 function setupDocumentColours(graph) {
@@ -44,6 +50,16 @@ function setupDocumentColours(graph) {
       requireNoMetadataDraft();
       const data = JSON.parse(session.current());
       session.replace(JSON.stringify(writeColourSettings(data, enabled, rules)));
+      updateDocumentControls();
+      document.getElementById('document-status').textContent = '';
+    },
+  });
+  presentationControls = setupPresentationSettings(document, graph, {
+    data: JSON.parse(session.current()),
+    change(state) {
+      requireNoMetadataDraft();
+      const data = JSON.parse(session.current());
+      session.replace(JSON.stringify(writePresentationSettings(data, state)));
       updateDocumentControls();
       document.getElementById('document-status').textContent = '';
     },
@@ -117,8 +133,10 @@ function refreshDocument(selectedName) {
   document.getElementById('document-error').textContent = '';
   document.getElementById('document-status').textContent = '';
   const graph = deriveGraph(parseDocument(session.current()));
-  if (JSON.stringify(graph) === displayedGraph) colourControls.update(JSON.parse(session.current()));
-  else renderGraph(graph, selectedName);
+  if (JSON.stringify(graph) === displayedGraph) {
+    colourControls.update(JSON.parse(session.current()));
+    presentationControls.update(JSON.parse(session.current()));
+  } else renderGraph(graph, selectedName);
 }
 
 function resetMetadata(selectedName = metadataEntity.value) {
@@ -383,6 +401,12 @@ function showGraph(data, selectedName) {
         data: { id: `edge-${index}`, source: ids.get(edge.source), target: ids.get(edge.target) },
       })),
     );
+  let compact = false;
+  try {
+    compact = readPresentationSettings(JSON.parse(session.current())).compact;
+  } catch {
+    // Conflicting settings are reported by the controls; use the default presentation.
+  }
   const graph = cytoscape({
     container: document.getElementById('graph'),
     elements,
@@ -395,15 +419,16 @@ function showGraph(data, selectedName) {
         style: {
           label: 'data(label)',
           shape: 'round-rectangle',
-          width: 200,
-          height: 54,
+          width: compact ? 150 : 200,
+          height: compact ? 40 : 54,
           'background-color': '#ffffff',
-          'border-color': '#c9dade',
+          'border-color': '#a8c6ce',
           'border-width': 2,
           color: '#204152',
-          'font-size': 12,
+          'font-size': 13,
+          'font-weight': 600,
           'text-wrap': 'ellipsis',
-          'text-max-width': 180,
+          'text-max-width': compact ? 130 : 180,
           'text-halign': 'center',
           'text-valign': 'center',
         },
@@ -821,7 +846,18 @@ function showGraph(data, selectedName) {
   }
   graph.on('tap', 'node', (event) => selectEntity(event.target.data('name')));
   graph.on('mouseover', 'node', (event) => {
-    graph.container().title = event.target.data('name');
+    if (!presentationControls.tooltipsEnabled()) return;
+    const entity = entities.get(event.target.data('name'));
+    const lines = [
+      entity.name,
+      entity.documented ? `Description: ${entity.description || 'No description provided.'}` : 'Undocumented entity',
+      `Direct dependencies: ${entity.documented ? entity.dependencies.join(', ') || 'None' : 'Unknown'}`,
+      `Direct downstream entities: ${downstream.get(entity.name).join(', ') || 'None'}`,
+    ];
+    for (const [key, value] of entity.extras || []) {
+      lines.push(`${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+    }
+    graph.container().title = lines.join('\n');
   });
   graph.on('mouseout', 'node', () => {
     graph.container().removeAttribute('title');
