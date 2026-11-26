@@ -19,7 +19,7 @@ async function addPadding(window, document, blob, image) {
     context.fillRect(0, 0, image.width, image.height);
     context.drawImage(source, image.padding, image.padding);
     return await new Promise((resolve, reject) => {
-      canvas.toBlob(result => result ? resolve(result) : reject(new Error('PNG encoding failed')), 'image/png');
+      canvas.toBlob((result) => (result ? resolve(result) : reject(new Error('PNG encoding failed'))), 'image/png');
     });
   } finally {
     window.URL.revokeObjectURL(sourceUrl);
@@ -52,9 +52,11 @@ function setupImageExport(window, document, graph) {
 
   function update() {
     const image = size();
-    const tooLarge = image && (image.width > MAX_SIDE || image.height > MAX_SIDE ||
-      image.width * image.height > MAX_PIXELS);
-    dimensions.textContent = image ? `${image.width.toLocaleString()} × ${image.height.toLocaleString()} px` : 'No visible entities.';
+    const tooLarge =
+      image && (image.width > MAX_SIDE || image.height > MAX_SIDE || image.width * image.height > MAX_PIXELS);
+    dimensions.textContent = image
+      ? `${image.width.toLocaleString()} × ${image.height.toLocaleString()} px`
+      : 'No visible entities.';
     status.textContent = tooLarge ? 'Image is too large. Choose a lower resolution or narrow the graph.' : '';
     button.disabled = busy || !image || !!tooLarge;
   }
@@ -69,7 +71,11 @@ function setupImageExport(window, document, graph) {
     let failed = false;
     try {
       const graphBlob = await graph.png({
-        full: true, bg: '#ffffff', maxWidth: image.graphWidth, maxHeight: image.graphHeight, output: 'blob-promise',
+        full: true,
+        bg: '#ffffff',
+        maxWidth: image.graphWidth,
+        maxHeight: image.graphHeight,
+        output: 'blob-promise',
       });
       if (!active) return;
       const blob = await addPadding(window, document, graphBlob, image);

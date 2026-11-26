@@ -52,7 +52,7 @@ The automated checks load representative JSON files, including 200 documented en
 
 ```sh
 npm run build:dependency
-node dependency-viewer/test/acceptance-fixtures.cjs
+node test/acceptance-fixtures.cjs
 ```
 
 On an isolated macOS test environment where networking can safely be disabled, open `dist/dependency-viewer.html` directly in current Safari via `file://`, and select `dist/dependency-acceptance.json`. Use Safari's Network inspector while opening and exercising the file to check for external requests. Do not disable shared network services or change another user's settings.

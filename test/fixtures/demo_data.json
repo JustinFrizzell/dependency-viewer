@@ -27,13 +27,17 @@
       "name": "workspace.lakehouse.silver_staging.orders",
       "description": "Cleaned orders with normalized timestamps and customer keys.",
       "owner": "Analytics engineering",
-      "quality": {"tier": "silver", "verified": true},
+      "quality": { "tier": "silver", "verified": true },
       "dependencies": ["workspace.lakehouse.bronze_raw.orders", "workspace.lakehouse.bronze_raw.customers"]
     },
     {
       "name": "workspace1.lakehouse.silver_staging.order_lines",
       "description": "Validated order lines joined to product details.",
-      "dependencies": ["workspace1.lakehouse.bronze_raw.order_lines", "workspace1.lakehouse.bronze_raw.products", "workspace1.lakehouse.bronze_raw.orders"]
+      "dependencies": [
+        "workspace1.lakehouse.bronze_raw.order_lines",
+        "workspace1.lakehouse.bronze_raw.products",
+        "workspace1.lakehouse.bronze_raw.orders"
+      ]
     },
     {
       "name": "workspace1.lakehouse.silver_intermediate.order_revenue",
@@ -56,17 +60,27 @@
     {
       "name": "workspace1.lakehouse.gold_mart.customer_value",
       "description": "Lifetime and trailing-90-day value for each customer.",
-      "dependencies": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.silver_intermediate.customer_activity"]
+      "dependencies": [
+        "workspace1.lakehouse.silver_intermediate.order_revenue",
+        "workspace1.lakehouse.silver_intermediate.customer_activity"
+      ]
     },
     {
       "name": "workspace1.lakehouse.gold_mart.product_performance",
       "description": "Units sold, returns, and revenue by product.",
-      "dependencies": ["workspace1.lakehouse.silver_intermediate.order_revenue", "workspace1.lakehouse.bronze_raw.products"]
+      "dependencies": [
+        "workspace1.lakehouse.silver_intermediate.order_revenue",
+        "workspace1.lakehouse.bronze_raw.products"
+      ]
     },
     {
       "name": "workspace1.report.commerce_pulse",
       "description": "Executive snapshot of sales, customer value, and top products.",
-      "dependencies": ["workspace1.lakehouse.gold_mart.daily_revenue", "workspace1.lakehouse.gold_mart.customer_value", "workspace1.lakehouse.gold_mart.product_performance"]
+      "dependencies": [
+        "workspace1.lakehouse.gold_mart.daily_revenue",
+        "workspace1.lakehouse.gold_mart.customer_value",
+        "workspace1.lakehouse.gold_mart.product_performance"
+      ]
     },
     {
       "name": "workspace.lakehouse.bronze_raw.app_events",
@@ -96,7 +110,10 @@
     {
       "name": "workspace.lakehouse.silver_intermediate.feature_usage",
       "description": "Weekly feature use by account and subscription plan.",
-      "dependencies": ["workspace.lakehouse.silver_intermediate.account_sessions", "workspace.lakehouse.bronze_raw.plans"]
+      "dependencies": [
+        "workspace.lakehouse.silver_intermediate.account_sessions",
+        "workspace.lakehouse.bronze_raw.plans"
+      ]
     },
     {
       "name": "workspace.lakehouse.gold_mart.feature_adoption",
@@ -109,7 +126,10 @@
       "owner": "Growth analytics",
       "certified": true,
       "reporting_period": "Weekly",
-      "dependencies": ["workspace.lakehouse.gold_mart.feature_adoption", "workspace.lakehouse.silver_intermediate.account_sessions"]
+      "dependencies": [
+        "workspace.lakehouse.gold_mart.feature_adoption",
+        "workspace.lakehouse.silver_intermediate.account_sessions"
+      ]
     },
     {
       "name": "workspace.lakehouse.bronze_raw.shipments",
@@ -169,7 +189,19 @@
     {
       "name": "workspace.lakehouse.silver_staging.delivery_events",
       "description": "Deduplicated carrier scans matched to shipment identifiers.",
-      "dependencies": ["workspace.lakehouse.bronze_raw.tracking_events", "workspace.lakehouse.bronze_raw.shipments", "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference", "workspace.lakehouse.bronze_raw.carriers", "workspace.lakehouse.bronze_raw.delivery_routes", "workspace.lakehouse.bronze_raw.delivery_addresses", "workspace.lakehouse.bronze_raw.warehouses", "workspace.lakehouse.bronze_raw.packages", "workspace.lakehouse.bronze_raw.delivery_exceptions", "workspace.lakehouse.bronze_raw.proof_of_delivery", "workspace.lakehouse.bronze_raw.delivery_attempts"]
+      "dependencies": [
+        "workspace.lakehouse.bronze_raw.tracking_events",
+        "workspace.lakehouse.bronze_raw.shipments",
+        "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference",
+        "workspace.lakehouse.bronze_raw.carriers",
+        "workspace.lakehouse.bronze_raw.delivery_routes",
+        "workspace.lakehouse.bronze_raw.delivery_addresses",
+        "workspace.lakehouse.bronze_raw.warehouses",
+        "workspace.lakehouse.bronze_raw.packages",
+        "workspace.lakehouse.bronze_raw.delivery_exceptions",
+        "workspace.lakehouse.bronze_raw.proof_of_delivery",
+        "workspace.lakehouse.bronze_raw.delivery_attempts"
+      ]
     },
     {
       "name": "workspace.lakehouse.silver_intermediate.delivery_metrics",
@@ -179,7 +211,10 @@
     {
       "name": "workspace.lakehouse.gold_mart.fulfillment_scorecard",
       "description": "Weekly delivery performance alongside customer-reported issues.",
-      "dependencies": ["workspace.lakehouse.silver_intermediate.delivery_metrics", "workspace.lakehouse.bronze_raw.support_cases"]
+      "dependencies": [
+        "workspace.lakehouse.silver_intermediate.delivery_metrics",
+        "workspace.lakehouse.bronze_raw.support_cases"
+      ]
     },
     {
       "name": "workspace.lakehouse.bronze_reference.public_holidays_and_regional_business_day_calendar_reference",

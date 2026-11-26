@@ -23,7 +23,7 @@ function setupEdgeMotion(window, document, graph, button) {
     animationFrame = null;
     if (!shouldAnimate()) return;
     if (lastTimestamp !== null) {
-      dashOffset -= (timestamp - lastTimestamp) * DASH_CYCLE / CYCLE_DURATION;
+      dashOffset -= ((timestamp - lastTimestamp) * DASH_CYCLE) / CYCLE_DURATION;
       while (dashOffset <= -DASH_CYCLE) dashOffset += DASH_CYCLE;
     }
     lastTimestamp = timestamp;
@@ -60,7 +60,7 @@ function setupEdgeMotion(window, document, graph, button) {
     else start();
   };
   document.addEventListener('visibilitychange', handleVisibility);
-  const handleMotionPreference = event => {
+  const handleMotionPreference = (event) => {
     systemReducedMotion = event.matches;
     if (systemReducedMotion) stop();
     updateButton();

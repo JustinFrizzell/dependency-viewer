@@ -1,12 +1,13 @@
 const fs = require('node:fs');
 
-const name = index => index === 0 ? 'DB.Raw' : index === 1 ? 'db.raw' : `table_${index}`;
+const name = (index) => (index === 0 ? 'DB.Raw' : index === 1 ? 'db.raw' : `table_${index}`);
 const entities = Array.from({ length: 200 }, (_, index) => ({
   name: name(index),
   dependencies: index % 5 === 0 ? [] : [name(index - 1)],
 }));
 entities[4].dependencies.push('missing', 'missing');
-entities[4].description = 'Sales "quoted" 東京 </script><script>window.injectedMarkupRan = true</script><img src=x onerror="window.injectedMarkupRan = true">';
+entities[4].description =
+  'Sales "quoted" 東京 </script><script>window.injectedMarkupRan = true</script><img src=x onerror="window.injectedMarkupRan = true">';
 
 for (const [path, data] of [
   ['dist/dependency-acceptance.json', { entities }],

@@ -8,12 +8,14 @@ module.exports = {
   mode: 'production',
   devtool: false,
   entry: path.resolve(__dirname, 'src/index.js'),
-  output: { path: path.resolve(__dirname, '../dist'), filename: 'dependency-viewer.js' },
+  output: { path: path.resolve(__dirname, 'dist'), filename: 'dependency-viewer.js' },
   optimization: {
-    minimizer: [new TerserPlugin({
-      extractComments: false,
-      terserOptions: { format: { comments: /@license|@preserve|^!/i } },
-    })],
+    minimizer: [
+      new TerserPlugin({
+        extractComments: false,
+        terserOptions: { format: { comments: /@license|@preserve|^!/i } },
+      }),
+    ],
   },
   performance: false,
   plugins: [
@@ -22,8 +24,8 @@ module.exports = {
       filename: 'dependency-viewer.html',
       inject: 'body',
       minify: false,
-      projectLicense: fs.readFileSync(path.resolve(__dirname, '../LICENSE'), 'utf8'),
-      thirdPartyNotices: fs.readFileSync(path.resolve(__dirname, '../THIRD_PARTY_NOTICES.txt'), 'utf8'),
+      projectLicense: fs.readFileSync(path.resolve(__dirname, 'LICENSE'), 'utf8'),
+      thirdPartyNotices: fs.readFileSync(path.resolve(__dirname, 'THIRD_PARTY_NOTICES.txt'), 'utf8'),
     }),
     new HtmlInlineScriptPlugin(),
   ],

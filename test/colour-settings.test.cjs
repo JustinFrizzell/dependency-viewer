@@ -6,23 +6,39 @@ const cytoscape = require('cytoscape');
 const { setupColourSettings } = require('../src/colour-settings');
 
 function open(t) {
-  const dom = new JSDOM(fs.readFileSync('dependency-viewer/src/index.html', 'utf8'));
+  const dom = new JSDOM(fs.readFileSync('src/index.html', 'utf8'));
   const graph = cytoscape({
     headless: true,
     styleEnabled: true,
     elements: [
-      { data: { id: 'overlap', name: 'workspace.BRONZE.gold.orders' }, classes: 'undocumented inspected' },
+      {
+        data: { id: 'overlap', name: 'workspace.BRONZE.gold.orders' },
+        classes: 'undocumented inspected',
+      },
       { data: { id: 'silver', name: 'workspace.silver.orders' } },
       { data: { id: 'other', name: 'workspace.raw.orders' }, classes: 'undocumented' },
     ],
     style: [
-      { selector: 'node', style: { 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2 } },
-      { selector: 'node.undocumented', style: { 'background-color': '#fff9ec', 'border-color': '#c08b3a', 'border-style': 'dashed' } },
+      {
+        selector: 'node',
+        style: { 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2 },
+      },
+      {
+        selector: 'node.undocumented',
+        style: {
+          'background-color': '#fff9ec',
+          'border-color': '#c08b3a',
+          'border-style': 'dashed',
+        },
+      },
       { selector: 'node.inspected', style: { 'border-color': '#168a80', 'border-width': 4 } },
     ],
   });
   setupColourSettings(dom.window.document, graph);
-  t.after(() => { graph.destroy(); dom.window.close(); });
+  t.after(() => {
+    graph.destroy();
+    dom.window.close();
+  });
   return { dom, document: dom.window.document, graph };
 }
 
@@ -36,7 +52,7 @@ function click(document, label) {
   document.querySelector(`button[aria-label="${label}"]`).click();
 }
 
-test('colours match full names case-insensitively and preserve status borders', t => {
+test('colours match full names case-insensitively and preserve status borders', (t) => {
   const { dom, document, graph } = open(t);
   const overlap = graph.getElementById('overlap');
   const other = graph.getElementById('other');
@@ -54,7 +70,7 @@ test('colours match full names case-insensitively and preserve status borders', 
   assert.equal(other.style('background-color'), 'rgb(255,249,236)');
 });
 
-test('reordering changes priority and moves each colour with its text', t => {
+test('reordering changes priority and moves each colour with its text', (t) => {
   const { dom, document, graph } = open(t);
   const overlap = graph.getElementById('overlap');
   input(dom, 'Text for gold colour', 'GOLD');
@@ -70,7 +86,7 @@ test('reordering changes priority and moves each colour with its text', t => {
   assert.equal(document.querySelector('input[aria-label="Text for gold colour"]').value, 'gold');
 });
 
-test('turning colours off restores existing fills and reset turns them back on', t => {
+test('turning colours off restores existing fills and reset turns them back on', (t) => {
   const { document, graph } = open(t);
   const overlap = graph.getElementById('overlap');
   const silver = graph.getElementById('silver');

@@ -11,7 +11,7 @@ npm ci
 npm run build
 ```
 
-The build writes a self-contained viewer to `dist/dependency-viewer.html`. Open it directly and select a JSON file on your computer. The viewer includes format guidance and a copyable example. See the [viewer guide](dependency-viewer/README.md) for the data format and acceptance instructions.
+The build writes a self-contained viewer to `dist/dependency-viewer.html`. Open it directly and select a JSON file on your computer. The viewer includes format guidance and a copyable example. See the [viewer guide](VIEWER_GUIDE.md) for the data format and acceptance instructions.
 
 ## Run tests
 

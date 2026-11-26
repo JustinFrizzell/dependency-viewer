@@ -11,15 +11,15 @@ function setupColourSettings(document, graph) {
   const panel = document.getElementById('colour-settings');
   const list = document.getElementById('colour-rules');
   const enabled = document.getElementById('colours-enabled');
-  let rules = defaults.map(rule => ({ ...rule }));
+  let rules = defaults.map((rule) => ({ ...rule }));
 
   function applyColours() {
     const active = enabled.checked
-      ? rules.map(rule => ({ colour: rule.colour, text: rule.text.trim().toLowerCase() })).filter(rule => rule.text)
+      ? rules.map((rule) => ({ colour: rule.colour, text: rule.text.trim().toLowerCase() })).filter((rule) => rule.text)
       : [];
-    graph.nodes().forEach(node => {
+    graph.nodes().forEach((node) => {
       const name = node.data('name').toLowerCase();
-      const match = active.find(rule => name.includes(rule.text));
+      const match = active.find((rule) => name.includes(rule.text));
       if (match) node.style('background-color', match.colour);
       else node.removeStyle('background-color');
     });
@@ -45,7 +45,10 @@ function setupColourSettings(document, graph) {
         applyColours();
       });
       row.append(swatch, input);
-      for (const [direction, offset, symbol] of [['up', -1, '↑'], ['down', 1, '↓']]) {
+      for (const [direction, offset, symbol] of [
+        ['up', -1, '↑'],
+        ['down', 1, '↓'],
+      ]) {
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = symbol;
@@ -62,8 +65,10 @@ function setupColourSettings(document, graph) {
         }
       }
       list.appendChild(row);
-      if (rule.name === focusName &&
-          ((focusDirection === 'up' && index === 0) || (focusDirection === 'down' && index === rules.length - 1))) {
+      if (
+        rule.name === focusName &&
+        ((focusDirection === 'up' && index === 0) || (focusDirection === 'down' && index === rules.length - 1))
+      ) {
         focusTarget = input;
       }
     }
@@ -72,7 +77,7 @@ function setupColourSettings(document, graph) {
 
   enabled.addEventListener('change', applyColours);
   document.getElementById('reset-colours').addEventListener('click', () => {
-    rules = defaults.map(rule => ({ ...rule }));
+    rules = defaults.map((rule) => ({ ...rule }));
     enabled.checked = true;
     renderRules();
     applyColours();

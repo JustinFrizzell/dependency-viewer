@@ -4,16 +4,23 @@ const { JSDOM } = require('jsdom');
 const { setupImageExport } = require('../src/export-image');
 
 function setup() {
-  const dom = new JSDOM(`<select id="export-resolution"><option value="1">1</option><option value="2" selected>2</option><option value="4">4</option></select>
+  const dom =
+    new JSDOM(`<select id="export-resolution"><option value="1">1</option><option value="2" selected>2</option><option value="4">4</option></select>
     <p id="export-dimensions"></p><button id="export-png"></button><p id="export-status"></p>`);
   const { window } = dom;
   const state = { visible: 1, width: 100, height: 50, options: null, resolve: null };
   window.Image = class {
-    set src(value) { queueMicrotask(() => this.onload()); }
+    set src(value) {
+      queueMicrotask(() => this.onload());
+    }
   };
   window.HTMLCanvasElement.prototype.getContext = () => ({
-    fillRect(...args) { state.fill = args; },
-    drawImage(...args) { state.draw = args.slice(1); },
+    fillRect(...args) {
+      state.fill = args;
+    },
+    drawImage(...args) {
+      state.draw = args.slice(1);
+    },
   });
   window.HTMLCanvasElement.prototype.toBlob = function (callback) {
     state.canvasSize = [this.width, this.height];
@@ -24,9 +31,11 @@ function setup() {
     elements: () => ({ boundingBox: () => ({ w: state.width, h: state.height }) }),
     on: () => {},
     off: () => {},
-    png: options => {
+    png: (options) => {
       state.options = options;
-      return new Promise(resolve => { state.resolve = resolve; });
+      return new Promise((resolve) => {
+        state.resolve = resolve;
+      });
     },
   };
   const control = setupImageExport(window, window.document, graph);
@@ -57,7 +66,10 @@ test('resolution and filtered bounds determine export size and limits', () => {
     state.height = 920;
     control.update();
     assert.equal(button.disabled, false);
-  } finally { control.cleanup(); dom.window.close(); }
+  } finally {
+    control.cleanup();
+    dom.window.close();
+  }
 });
 
 test('exports a white full-graph PNG and keeps export disabled if the view becomes empty', async () => {
@@ -66,41 +78,58 @@ test('exports a white full-graph PNG and keeps export disabled if the view becom
     let download;
     dom.window.URL.createObjectURL = () => 'blob:test';
     dom.window.URL.revokeObjectURL = () => {};
-    dom.window.HTMLAnchorElement.prototype.click = function () { download = this.download; };
+    dom.window.HTMLAnchorElement.prototype.click = function () {
+      download = this.download;
+    };
     const button = document.getElementById('export-png');
     button.click();
     assert.equal(button.disabled, true);
     assert.deepEqual(state.options, {
-      full: true, bg: '#ffffff', maxWidth: 200, maxHeight: 100, output: 'blob-promise',
+      full: true,
+      bg: '#ffffff',
+      maxWidth: 200,
+      maxHeight: 100,
+      output: 'blob-promise',
     });
     state.visible = 0;
     control.update();
     state.resolve(new dom.window.Blob());
-    await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
     assert.equal(download, 'dependency-graph.png');
     assert.deepEqual(state.canvasSize, [360, 260]);
     assert.deepEqual(state.fill, [0, 0, 360, 260]);
     assert.deepEqual(state.draw, [80, 80]);
     assert.equal(button.disabled, true);
-  } finally { control.cleanup(); dom.window.close(); }
+  } finally {
+    control.cleanup();
+    dom.window.close();
+  }
 });
 
 test('reports export failures and suppresses downloads after the graph is replaced', async () => {
   const { dom, state, control, document } = setup();
   try {
     const button = document.getElementById('export-png');
-    dom.window.URL.createObjectURL = () => { throw new Error('unavailable'); };
+    dom.window.URL.createObjectURL = () => {
+      throw new Error('unavailable');
+    };
     button.click();
     state.resolve(new dom.window.Blob());
-    await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
     assert.match(document.getElementById('export-status').textContent, /could not export/i);
     assert.equal(button.disabled, false);
     let downloaded = false;
-    dom.window.URL.createObjectURL = () => { downloaded = true; return 'blob:test'; };
+    dom.window.URL.createObjectURL = () => {
+      downloaded = true;
+      return 'blob:test';
+    };
     button.click();
     control.cleanup();
     state.resolve(new dom.window.Blob());
-    await new Promise(resolve => dom.window.setTimeout(resolve, 0));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
     assert.equal(downloaded, false);
-  } finally { control.cleanup(); dom.window.close(); }
+  } finally {
+    control.cleanup();
+    dom.window.close();
+  }
 });

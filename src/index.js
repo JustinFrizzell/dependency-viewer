@@ -52,7 +52,7 @@ fileInput.addEventListener('change', () => {
   reader.readAsText(file);
 });
 
-document.addEventListener('click', event => {
+document.addEventListener('click', (event) => {
   const button = event.target.closest('#toggle-file-panel');
   if (!button) return;
   filePanel.hidden = !filePanel.hidden;
@@ -89,12 +89,16 @@ function showGraph(data) {
       : { short: name.slice(dot + 1), prefix: name.slice(0, dot) };
   }
   const ids = new Map(data.entities.map((entity, index) => [entity.name, `entity-${index}`]));
-  const elements = data.entities.map(entity => ({
-    data: { id: ids.get(entity.name), name: entity.name, label: nameParts(entity.name).short },
-    classes: entity.documented ? '' : 'undocumented',
-  })).concat(data.edges.map((edge, index) => ({
-    data: { id: `edge-${index}`, source: ids.get(edge.source), target: ids.get(edge.target) },
-  })));
+  const elements = data.entities
+    .map((entity) => ({
+      data: { id: ids.get(entity.name), name: entity.name, label: nameParts(entity.name).short },
+      classes: entity.documented ? '' : 'undocumented',
+    }))
+    .concat(
+      data.edges.map((edge, index) => ({
+        data: { id: `edge-${index}`, source: ids.get(edge.source), target: ids.get(edge.target) },
+      })),
+    );
   const graph = cytoscape({
     container: document.getElementById('graph'),
     elements,
@@ -102,27 +106,59 @@ function showGraph(data) {
     minZoom: 0.01,
     maxZoom: 4,
     style: [
-      { selector: 'node', style: { 'label': 'data(label)', 'shape': 'round-rectangle', 'width': 200, 'height': 54, 'background-color': '#ffffff', 'border-color': '#c9dade', 'border-width': 2, 'color': '#204152', 'font-size': 12, 'text-wrap': 'ellipsis', 'text-max-width': 180, 'text-halign': 'center', 'text-valign': 'center' } },
-      { selector: 'node.undocumented', style: { 'border-style': 'dashed', 'border-color': '#c08b3a', 'background-color': '#fff9ec' } },
+      {
+        selector: 'node',
+        style: {
+          label: 'data(label)',
+          shape: 'round-rectangle',
+          width: 200,
+          height: 54,
+          'background-color': '#ffffff',
+          'border-color': '#c9dade',
+          'border-width': 2,
+          color: '#204152',
+          'font-size': 12,
+          'text-wrap': 'ellipsis',
+          'text-max-width': 180,
+          'text-halign': 'center',
+          'text-valign': 'center',
+        },
+      },
+      {
+        selector: 'node.undocumented',
+        style: {
+          'border-style': 'dashed',
+          'border-color': '#c08b3a',
+          'background-color': '#fff9ec',
+        },
+      },
       { selector: 'node.inspected', style: { 'border-color': '#168a80', 'border-width': 4 } },
       { selector: 'edge', style: dependencyEdgeStyle },
-      { selector: '.filtered-out', style: { 'display': 'none' } },
+      { selector: '.filtered-out', style: { display: 'none' } },
     ],
-    layout: { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80, fit: true, padding: 45, animate: false },
+    layout: {
+      name: 'dagre',
+      rankDir: 'LR',
+      nodeSep: 30,
+      rankSep: 80,
+      fit: true,
+      padding: 45,
+      animate: false,
+    },
   });
   resizeGraph = () => graph.resize();
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
   setupColourSettings(document, graph);
   const imageExport = setupImageExport(window, document, graph);
-  const entities = new Map(data.entities.map(entity => [entity.name, entity]));
-  const downstream = new Map(data.entities.map(entity => [entity.name, []]));
+  const entities = new Map(data.entities.map((entity) => [entity.name, entity]));
+  const downstream = new Map(data.entities.map((entity) => [entity.name, []]));
   for (const edge of data.edges) downstream.get(edge.source).push(edge.target);
   const search = document.getElementById('entity-search');
   const results = document.getElementById('entity-results');
   const searchStatus = document.getElementById('entity-search-status');
   function updateResults() {
     const query = search.value.toLowerCase();
-    const matches = data.entities.filter(entity => entity.name.toLowerCase().includes(query));
+    const matches = data.entities.filter((entity) => entity.name.toLowerCase().includes(query));
     results.replaceChildren();
     for (const entity of matches) {
       const item = document.createElement('li');
@@ -151,9 +187,11 @@ function showGraph(data) {
           const padding = Math.min(45, graph.width() / 4, graph.height() / 4);
           const halfWidth = Math.max(x - bounds.x1, bounds.x2 - x);
           const halfHeight = Math.max(y - bounds.y1, bounds.y2 - y);
-          const zoom = Math.min(graph.zoom(),
+          const zoom = Math.min(
+            graph.zoom(),
             (graph.width() / 2 - padding) / halfWidth,
-            (graph.height() / 2 - padding) / halfHeight);
+            (graph.height() / 2 - padding) / halfHeight,
+          );
           graph.minZoom(Math.min(graph.minZoom(), zoom));
           graph.zoom(zoom);
         }
@@ -191,22 +229,36 @@ function showGraph(data) {
   function updateView(fit) {
     const visible = view === 'all' ? new Set(entities.keys()) : new Set([selected]);
     if (view === 'upstream' || view === 'connected') {
-      for (const name of reachable(selected, name => entities.get(name).dependencies)) visible.add(name);
+      for (const name of reachable(selected, (name) => entities.get(name).dependencies)) visible.add(name);
     }
     if (view === 'downstream' || view === 'connected') {
-      for (const name of reachable(selected, name => downstream.get(name))) visible.add(name);
+      for (const name of reachable(selected, (name) => downstream.get(name))) visible.add(name);
     }
     const query = filterQuery();
     for (const name of visible) {
       if (!name.toLowerCase().includes(query)) visible.delete(name);
     }
-    graph.nodes().forEach(node => node.toggleClass('filtered-out', !visible.has(node.data('name'))));
-    graph.edges().forEach(edge => edge.toggleClass('filtered-out',
-      !visible.has(edge.source().data('name')) || !visible.has(edge.target().data('name'))));
-    names.textContent = 'Entities: ' + data.entities.filter(entity => visible.has(entity.name))
-      .map(entity => entity.name + (entity.documented ? '' : ' (undocumented)')).join(', ');
-    relationships.textContent = 'Relationships: ' + (data.edges.filter(edge => visible.has(edge.source) && visible.has(edge.target))
-      .map(edge => `${edge.source} → ${edge.target}`).join(', ') || 'none');
+    graph.nodes().forEach((node) => node.toggleClass('filtered-out', !visible.has(node.data('name'))));
+    graph
+      .edges()
+      .forEach((edge) =>
+        edge.toggleClass(
+          'filtered-out',
+          !visible.has(edge.source().data('name')) || !visible.has(edge.target().data('name')),
+        ),
+      );
+    names.textContent =
+      'Entities: ' +
+      data.entities
+        .filter((entity) => visible.has(entity.name))
+        .map((entity) => entity.name + (entity.documented ? '' : ' (undocumented)'))
+        .join(', ');
+    relationships.textContent =
+      'Relationships: ' +
+      (data.edges
+        .filter((edge) => visible.has(edge.source) && visible.has(edge.target))
+        .map((edge) => `${edge.source} → ${edge.target}`)
+        .join(', ') || 'none');
     filterStatus.textContent = query && !visible.size ? 'No matching entities.' : '';
     imageExport.update();
     for (const button of viewButtons) {
@@ -248,7 +300,7 @@ function showGraph(data) {
     const descriptionHeading = document.createElement('h3');
     descriptionHeading.textContent = 'Description';
     const descriptionText = document.createElement('p');
-    descriptionText.textContent = entity.documented ? (entity.description || 'No description provided.') : 'Unknown';
+    descriptionText.textContent = entity.documented ? entity.description || 'No description provided.' : 'Unknown';
     description.append(descriptionHeading, descriptionText);
     if (entity.extras && entity.extras.length) {
       const extras = document.createElement('dl');
@@ -289,16 +341,26 @@ function showGraph(data) {
       return section;
     }
     details.append(
-      relationshipSection('Direct dependencies', entity.dependencies, entity.documented ? 'No dependencies.' : 'Unknown'),
-      relationshipSection('Direct downstream entities', downstream.get(name), 'No downstream entities.')
+      relationshipSection(
+        'Direct dependencies',
+        entity.dependencies,
+        entity.documented ? 'No dependencies.' : 'Unknown',
+      ),
+      relationshipSection('Direct downstream entities', downstream.get(name), 'No downstream entities.'),
     );
     inspector.appendChild(details);
   }
-  graph.on('tap', 'node', event => selectEntity(event.target.data('name')));
-  graph.on('mouseover', 'node', event => { graph.container().title = event.target.data('name'); });
-  graph.on('mouseout', 'node', () => { graph.container().removeAttribute('title'); });
+  graph.on('tap', 'node', (event) => selectEntity(event.target.data('name')));
+  graph.on('mouseover', 'node', (event) => {
+    graph.container().title = event.target.data('name');
+  });
+  graph.on('mouseout', 'node', () => {
+    graph.container().removeAttribute('title');
+  });
   const zoomLevel = document.getElementById('zoom-level');
-  const updateZoom = () => { zoomLevel.textContent = `${Math.round(graph.zoom() * 100)}%`; };
+  const updateZoom = () => {
+    zoomLevel.textContent = `${Math.round(graph.zoom() * 100)}%`;
+  };
   graph.on('zoom', updateZoom);
   updateZoom();
   document.querySelector('.controls').hidden = false;
@@ -308,7 +370,10 @@ function showGraph(data) {
     if (visible.length) graph.fit(visible, 45);
   });
   function zoom(factor) {
-    graph.zoom({ level: graph.zoom() * factor, renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 } });
+    graph.zoom({
+      level: graph.zoom() * factor,
+      renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 },
+    });
   }
   document.getElementById('zoom-in').addEventListener('click', () => zoom(1.25));
   document.getElementById('zoom-out').addEventListener('click', () => zoom(1 / 1.25));

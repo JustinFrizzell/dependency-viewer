@@ -1,0 +1,134 @@
+<!doctype html>
+<!--
+<%= htmlWebpackPlugin.options.projectLicense %>
+<%= htmlWebpackPlugin.options.thirdPartyNotices %>
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dependency viewer</title>
+  </head>
+  <body>
+    <header>
+      <h1>Dependency viewer</h1>
+      <span>Entity dependency</span>
+    </header>
+    <section id="file-panel" class="file-panel" aria-label="Dependency file">
+      <label for="dependency-file">Choose dependency JSON</label>
+      <input id="dependency-file" type="file" accept=".json,application/json" />
+      <span id="file-name"></span>
+      <p id="file-error" role="alert"></p>
+      <details>
+        <summary>JSON format and example</summary>
+        <p>This is an offline tool. Your data stays in your browser and is not uploaded to the internet.</p>
+        <p>
+          Use an object with an <code>entities</code> array. Each entity needs a unique, nonblank
+          <code>name</code> without surrounding whitespace and a <code>dependencies</code> array of upstream entity
+          names. Names are case-sensitive. An optional <code>description</code> must be a string; other properties are
+          displayed in the entity details.
+        </p>
+        <p>
+          Use an empty array when there are no dependencies. Missing dependency records appear as undocumented entities;
+          repeated dependencies are combined. Cycles are not allowed.
+        </p>
+        <textarea id="format-example" readonly aria-label="Example JSON" rows="16">
+{
+  "entities": [
+    {
+      "name": "source.orders",
+      "description": "A source with no upstream dependencies.",
+      "dependencies": []
+    },
+    {
+      "name": "source.customers",
+      "dependencies": []
+    },
+    {
+      "name": "model.orders_with_customers",
+      "description": "Combines two upstream sources.",
+      "dependencies": ["source.orders", "source.customers"],
+      "owner": "Analytics team",
+      "tags": ["optional", "additional properties"]
+    },
+    {
+      "name": "report.customer_orders",
+      "description": "Depends on the model, which in turn depends on both sources.",
+      "dependencies": ["model.orders_with_customers"]
+    }
+  ]
+}</textarea>
+        <button id="copy-example" type="button">Copy example</button>
+        <span id="copy-status" role="status"></span>
+      </details>
+    </section>
+    <main>
+      <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
+      <p id="status" role="status"></p>
+      <p id="graph-filter-status" role="status"></p>
+      <div id="graph-summary" class="visually-hidden"></div>
+      <details id="entity-list" open hidden>
+        <summary>Entities</summary>
+        <div class="entity-list-content">
+          <label for="entity-search">Search entities</label>
+          <input id="entity-search" type="search" autocomplete="off" placeholder="Search full entity names" />
+          <p id="entity-search-status" role="status"></p>
+          <ul id="entity-results"></ul>
+        </div>
+      </details>
+      <details id="colour-settings" open hidden>
+        <summary>Colours</summary>
+        <div class="colour-settings-content">
+          <div class="colour-settings-actions">
+            <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
+            <button id="reset-colours" type="button">Reset</button>
+          </div>
+          <p>Colour entities when their full name contains this text. The first match wins.</p>
+          <div id="colour-rules"></div>
+        </div>
+      </details>
+      <div id="dependency-views" aria-label="Dependency view" hidden>
+        <input
+          id="graph-filter"
+          type="search"
+          aria-label="Filter graph by entity name"
+          autocomplete="off"
+          placeholder="Filter entity names"
+        />
+        <button type="button" data-view="all" aria-pressed="true">All</button>
+        <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
+        <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
+        <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
+        <button id="toggle-file-panel" type="button" aria-controls="file-panel" aria-expanded="false">File</button>
+        <details id="export-menu">
+          <summary>Export</summary>
+          <div class="export-menu-content">
+            <strong>Export filtered graph</strong>
+            <label for="export-resolution">Resolution</label>
+            <select id="export-resolution">
+              <option value="1">1×</option>
+              <option value="2" selected>2×</option>
+              <option value="4">4×</option>
+            </select>
+            <p id="export-dimensions" aria-live="polite"></p>
+            <button id="export-png" type="button">Export PNG</button>
+            <p id="export-status" role="status"></p>
+          </div>
+        </details>
+      </div>
+      <div class="controls" aria-label="Graph navigation" hidden>
+        <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        <output id="zoom-level" aria-label="Zoom level"></output>
+        <button id="fit" type="button">Reset to fit</button>
+        <button id="edge-motion" type="button">Pause</button>
+      </div>
+    </main>
+    <footer>
+      <details id="inspector" open>
+        <summary>Entity details</summary>
+        <div id="selection-status" aria-live="polite">No entity selected. Select an entity to inspect its details.</div>
+      </details>
+    </footer>
+  </body>
+</html>

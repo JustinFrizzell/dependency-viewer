@@ -33,19 +33,19 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
     matchMedia: () => ({
       matches: reducedMotion,
       addEventListener: (name, listener) => motionListeners.set(name, listener),
-      removeEventListener: name => motionListeners.delete(name),
+      removeEventListener: (name) => motionListeners.delete(name),
     }),
-    requestAnimationFrame: callback => {
+    requestAnimationFrame: (callback) => {
       frameId += 1;
       frames.set(frameId, callback);
       return frameId;
     },
-    cancelAnimationFrame: id => frames.delete(id),
+    cancelAnimationFrame: (id) => frames.delete(id),
   };
   const document = {
     hidden,
     addEventListener: (name, listener) => documentListeners.set(name, listener),
-    removeEventListener: name => documentListeners.delete(name),
+    removeEventListener: (name) => documentListeners.delete(name),
   };
   const visibleEdges = {
     style: (property, value) => {
@@ -55,7 +55,7 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
   };
   const graph = {
     edges: () => ({
-      not: selector => {
+      not: (selector) => {
         assert.equal(selector, '.filtered-out');
         return visibleEdges;
       },
@@ -64,19 +64,26 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
   const button = new FakeButton();
   const cleanup = setupEdgeMotion(window, document, graph, button);
 
-  const runFrame = timestamp => {
+  const runFrame = (timestamp) => {
     const callback = [...frames.values()][0];
     assert.ok(callback);
     frames.clear();
     callback(timestamp);
   };
   return {
-    button, document, frames, offsets, runFrame, cleanup, motionListeners, documentListeners,
-    emitVisibility: hiddenNow => {
+    button,
+    document,
+    frames,
+    offsets,
+    runFrame,
+    cleanup,
+    motionListeners,
+    documentListeners,
+    emitVisibility: (hiddenNow) => {
       document.hidden = hiddenNow;
       documentListeners.get('visibilitychange')();
     },
-    emitMotionPreference: matches => motionListeners.get('change')({ matches }),
+    emitMotionPreference: (matches) => motionListeners.get('change')({ matches }),
   };
 }
 
