@@ -17,6 +17,9 @@
     <section id="file-panel" class="file-panel" aria-label="Dependency file">
       <label for="dependency-file">Choose dependency JSON</label>
       <input id="dependency-file" type="file" accept=".json,application/json" />
+      <label for="paste-json">Or paste dependency JSON</label>
+      <textarea id="paste-json" rows="6" spellcheck="false"></textarea>
+      <button id="open-paste" type="button">Open pasted JSON</button>
       <span id="file-name"></span>
       <p id="file-error" role="alert"></p>
       <details>
@@ -62,6 +65,49 @@
         <span id="copy-status" role="status"></span>
       </details>
     </section>
+    <details id="document-panel" class="document-panel" hidden>
+      <summary>Opened Document <span id="unsaved-indicator"></span></summary>
+      <label for="document-json">Document JSON draft</label>
+      <textarea id="document-json" rows="8" spellcheck="false"></textarea>
+      <button id="apply-document" type="button">Apply JSON draft</button>
+      <button id="discard-document" type="button">Discard JSON draft</button>
+      <button id="undo-document" type="button">Undo</button>
+      <button id="redo-document" type="button">Redo</button>
+      <button id="settings-entry" type="button" aria-controls="colour-settings">Settings</button>
+      <p id="document-error" role="alert"></p>
+      <button id="copy-document" type="button">Copy Document</button>
+      <button id="download-document" type="button">Download Document</button>
+      <span id="document-status" role="status"></span>
+    </details>
+    <details id="add-entity-panel" class="document-panel" hidden>
+      <summary>Add Entity</summary>
+      <form id="add-entity-form" novalidate>
+        <label for="new-entity-name">Entity name</label>
+        <input id="new-entity-name" type="text" autocomplete="off" aria-describedby="add-entity-error" />
+        <label for="new-entity-description">Description (optional)</label>
+        <textarea id="new-entity-description" rows="3"></textarea>
+        <button type="submit">Add Entity</button>
+        <button id="discard-new-entity-draft" type="button">Discard new Entity draft</button>
+        <p id="add-entity-error" role="alert"></p>
+      </form>
+    </details>
+    <details id="metadata-panel" class="document-panel" hidden>
+      <summary>Edit Entity properties</summary>
+      <form id="metadata-form" novalidate>
+        <label for="metadata-entity">Entity</label>
+        <select id="metadata-entity"></select>
+        <label for="metadata-property">Property</label>
+        <select id="metadata-property"></select>
+        <label for="metadata-key">Property name</label>
+        <input id="metadata-key" type="text" autocomplete="off" aria-describedby="metadata-error" />
+        <label for="metadata-value">JSON value</label>
+        <textarea id="metadata-value" rows="4" spellcheck="false" aria-describedby="metadata-error"></textarea>
+        <button type="submit">Apply property</button>
+        <button id="metadata-remove" type="button">Remove property</button>
+        <button id="metadata-discard" type="button">Discard property draft</button>
+        <p id="metadata-error" role="alert"></p>
+      </form>
+    </details>
     <main>
       <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
       <p id="status" role="status"></p>
@@ -77,14 +123,22 @@
         </div>
       </details>
       <details id="colour-settings" open hidden>
-        <summary>Colours</summary>
+        <summary>Settings</summary>
         <div class="colour-settings-content">
           <div class="colour-settings-actions">
             <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
             <button id="reset-colours" type="button">Reset</button>
           </div>
           <p>Colour entities when their full name contains this text. The first match wins.</p>
+          <p id="colour-error" role="alert"></p>
           <div id="colour-rules"></div>
+          <section class="presentation-settings" aria-labelledby="presentation-heading">
+            <h3 id="presentation-heading">Graph presentation</h3>
+            <label><input id="compact-nodes" type="checkbox" /> Compact nodes</label>
+            <label><input id="tooltips-enabled" type="checkbox" checked /> Show hover tooltips</label>
+            <button id="reset-presentation" type="button">Reset presentation</button>
+            <p id="presentation-error" role="alert"></p>
+          </section>
         </div>
       </details>
       <div id="dependency-views" aria-label="Dependency view" hidden>
