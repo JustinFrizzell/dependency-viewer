@@ -7,6 +7,14 @@ import { setupColourSettings, writeColourSettings } from './colour-settings';
 import { setupPresentationSettings, writePresentationSettings } from './presentation-settings';
 import { showGraph } from './graph-navigation';
 import type { Graph } from './document-types';
+import { mountVisualPrototype } from './prototype-visual';
+
+if (
+  process.env.NODE_ENV !== 'production' &&
+  (new URLSearchParams(location.search).has('variant') || location.pathname.endsWith('/visual-prototype.html'))
+) {
+  window.addEventListener('load', mountVisualPrototype);
+}
 
 const fileInput = document.getElementById('dependency-file') as HTMLInputElement;
 const fileError = document.getElementById('file-error') as HTMLElement;

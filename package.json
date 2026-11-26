@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "prototype:visual": "node --import tsx node_modules/webpack-cli/bin/cli.js --config webpack.config.ts --mode development --disable-interpret",
     "build": "npm run build:dependency",
     "test": "npm run test:dependency",
     "test:browser": "npm run build && node --import tsx --test test/browser/*.test.ts",
