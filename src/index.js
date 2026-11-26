@@ -5,7 +5,7 @@ const { parseDocument, deriveGraph } = require('./data');
 const { createDocumentSession } = require('./document-session');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
-const { setupColourSettings } = require('./colour-settings');
+const { setupColourSettings, writeColourSettings } = require('./colour-settings');
 const { setupImageExport } = require('./export-image');
 cytoscape.use(dagre);
 
@@ -31,6 +31,24 @@ let metadataRejected = false;
 const hasMetadataDraft = () =>
   metadataRejected || metadataKey.value !== metadataBaseline[0] || metadataValue.value !== metadataBaseline[1];
 const isUnsaved = () => session && (session.isUnsaved() || hasMetadataDraft());
+function requireNoMetadataDraft() {
+  if (hasMetadataDraft()) throw new Error('Apply or discard the property draft before editing the Document.');
+}
+let colourControls;
+let displayedGraph;
+
+function setupDocumentColours(graph) {
+  colourControls = setupColourSettings(document, graph, {
+    data: JSON.parse(session.current()),
+    change(enabled, rules) {
+      requireNoMetadataDraft();
+      const data = JSON.parse(session.current());
+      session.replace(JSON.stringify(writeColourSettings(data, enabled, rules)));
+      updateDocumentControls();
+      document.getElementById('document-status').textContent = '';
+    },
+  });
+}
 
 function openDocument(raw, name) {
   let nextDocument;
@@ -62,6 +80,7 @@ function renderGraph(graph, selectedName) {
   cleanupGraph();
   document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
   document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
+  displayedGraph = JSON.stringify(graph);
   filePanel.hidden = graph.entities.length > 0;
   document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
   if (graph.entities.length) cleanupGraph = showGraph(graph, selectedName);
@@ -69,6 +88,7 @@ function renderGraph(graph, selectedName) {
     cleanupGraph = () => {};
     resizeGraph = () => {};
     document.getElementById('status').textContent = 'No entities in this dependency dataset.';
+    setupDocumentColours({ nodes: () => [] });
   }
 }
 
@@ -96,7 +116,9 @@ function refreshDocument(selectedName) {
   updateDocumentControls();
   document.getElementById('document-error').textContent = '';
   document.getElementById('document-status').textContent = '';
-  renderGraph(deriveGraph(parseDocument(session.current())), selectedName);
+  const graph = deriveGraph(parseDocument(session.current()));
+  if (JSON.stringify(graph) === displayedGraph) colourControls.update(JSON.parse(session.current()));
+  else renderGraph(graph, selectedName);
 }
 
 function resetMetadata(selectedName = metadataEntity.value) {
@@ -195,12 +217,18 @@ document.getElementById('metadata-remove').addEventListener('click', () => {
   }
 });
 
+document.getElementById('settings-entry').addEventListener('click', () => {
+  const panel = document.getElementById('colour-settings');
+  panel.open = true;
+  panel.querySelector('summary').focus();
+});
+
 document.getElementById('add-entity-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const name = document.getElementById('new-entity-name').value;
   const description = document.getElementById('new-entity-description').value;
   try {
-    if (hasMetadataDraft()) throw new Error('Apply or discard the property draft before editing the graph.');
+    requireNoMetadataDraft();
     const documentData = parseDocument(session.current());
     if (!name || name.trim() !== name)
       throw new Error('Entity name must be nonblank and have no surrounding whitespace.');
@@ -402,7 +430,7 @@ function showGraph(data, selectedName) {
   });
   resizeGraph = () => graph.resize();
   document.getElementById('inspector').addEventListener('toggle', () => graph.resize());
-  setupColourSettings(document, graph);
+  setupDocumentColours(graph);
   const imageExport = setupImageExport(window, document, graph);
   const entities = new Map(data.entities.map((entity) => [entity.name, entity]));
   const downstream = new Map(data.entities.map((entity) => [entity.name, []]));
@@ -548,6 +576,124 @@ function showGraph(data, selectedName) {
       badge.textContent = 'Undocumented entity';
       inspector.appendChild(badge);
     }
+    const form = document.createElement('form');
+    form.id = 'edit-entity-form';
+    form.noValidate = true;
+    const nameLabel = document.createElement('label');
+    nameLabel.htmlFor = 'edit-entity-name';
+    nameLabel.textContent = 'Entity name';
+    const nameInput = document.createElement('input');
+    nameInput.id = 'edit-entity-name';
+    nameInput.value = name;
+    nameInput.setAttribute('aria-describedby', 'edit-entity-error');
+    form.append(nameLabel, nameInput);
+    let descriptionInput;
+    if (entity.documented) {
+      const descriptionLabel = document.createElement('label');
+      descriptionLabel.htmlFor = 'edit-entity-description';
+      descriptionLabel.textContent = 'Description';
+      descriptionInput = document.createElement('textarea');
+      descriptionInput.id = 'edit-entity-description';
+      descriptionInput.value = entity.description || '';
+      descriptionInput.setAttribute('aria-describedby', 'edit-entity-error');
+      form.append(descriptionLabel, descriptionInput);
+    }
+    const save = document.createElement('button');
+    save.type = 'submit';
+    save.textContent = 'Apply Entity changes';
+    const error = document.createElement('p');
+    error.id = 'edit-entity-error';
+    error.setAttribute('role', 'alert');
+    form.append(save, error);
+    form.addEventListener('input', () => {
+      error.textContent = '';
+    });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      try {
+        requireNoMetadataDraft();
+        const newName = nameInput.value;
+        if (!newName || newName.trim() !== newName)
+          throw new Error('Entity name must be nonblank and have no surrounding whitespace.');
+        if (newName !== name && entities.has(newName)) throw new Error('An Entity with this name already exists.');
+        const data = parseDocument(session.current());
+        const record = data.entities.find((item) => item.name === name);
+        if (record) {
+          record.name = newName;
+          if (descriptionInput.value !== (record.description || '')) record.description = descriptionInput.value;
+        }
+        for (const item of data.entities) {
+          item.dependencies = item.dependencies.map((dependency) => (dependency === name ? newName : dependency));
+        }
+        session.replace(JSON.stringify(data));
+        refreshDocument(newName);
+        document.getElementById('edit-entity-name').focus();
+      } catch (reason) {
+        error.textContent = `Error: ${reason.message}`;
+      }
+    });
+    inspector.appendChild(form);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.id = 'delete-entity';
+    deleteButton.textContent = 'Remove Entity';
+    const confirmation = document.createElement('fieldset');
+    confirmation.hidden = true;
+    const prompt = document.createElement('legend');
+    prompt.textContent =
+      entity.documented && downstream.get(name).length
+        ? 'Remove this Entity and retain or remove its references?'
+        : 'Remove this Entity and its references?';
+    confirmation.appendChild(prompt);
+    function choice(id, label, action) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = `delete-entity-${id}`;
+      button.textContent = label;
+      button.addEventListener('click', action);
+      confirmation.appendChild(button);
+    }
+    function removeEntity(removeReferences) {
+      try {
+        requireNoMetadataDraft();
+        const data = parseDocument(session.current());
+        data.entities = data.entities.filter((item) => item.name !== name);
+        if (removeReferences) {
+          for (const item of data.entities)
+            item.dependencies = item.dependencies.filter((dependency) => dependency !== name);
+        }
+        session.replace(JSON.stringify(data));
+        refreshDocument();
+        const target = document.getElementById('entity-list').hidden
+          ? document.querySelector('#add-entity-panel summary')
+          : document.querySelector('#entity-list summary');
+        target.focus();
+      } catch (reason) {
+        error.textContent = `Error: ${reason.message}`;
+      }
+    }
+    if (entity.documented && downstream.get(name).length) {
+      choice('retain', 'Retain references as undocumented', () => removeEntity(false));
+    }
+    choice(
+      'remove',
+      entity.documented && downstream.get(name).length ? 'Remove references too' : 'Confirm removal',
+      () => removeEntity(true),
+    );
+    choice('cancel', 'Cancel', () => {
+      confirmation.hidden = true;
+      deleteButton.focus();
+    });
+    deleteButton.addEventListener('click', () => {
+      if (session.hasDraft()) {
+        error.textContent = 'Error: Apply or discard the JSON draft before editing the graph.';
+        return;
+      }
+      error.textContent = '';
+      confirmation.hidden = false;
+      confirmation.querySelector('button').focus();
+    });
+    inspector.append(deleteButton, confirmation);
     const details = document.createElement('div');
     details.className = 'inspector-details';
     const description = document.createElement('section');

@@ -97,7 +97,8 @@ header span {
 #file-error:not(:empty),
 #document-error:not(:empty),
 #add-entity-error:not(:empty),
-#metadata-error:not(:empty) {
+#metadata-error:not(:empty),
+#edit-entity-error:not(:empty) {
   width: 100%;
   color: #a32020;
   margin: 6px 0 0;
@@ -392,6 +393,24 @@ footer {
 }
 #selection-status {
   padding: 4px 24px 14px;
+}
+#edit-entity-form label {
+  display: block;
+  font-weight: 600;
+  margin-top: 8px;
+}
+#edit-entity-form input,
+#edit-entity-form textarea {
+  display: block;
+  width: min(100%, 600px);
+  font: inherit;
+}
+#edit-entity-form button,
+#delete-entity {
+  margin-top: 8px;
+}
+#selection-status fieldset {
+  margin-top: 8px;
 }
 footer h2 {
   display: inline;
