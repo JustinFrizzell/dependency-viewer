@@ -90,6 +90,36 @@ test('edits and downloads a Document that can be uploaded offline with metadata 
   }
 });
 
+test('keeps form drafts visible and blocks download and selection until resolved', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ offline: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#edit-entity-name').fill('B');
+    assert.equal(await page.locator('#download-document').isDisabled(), true);
+    await page.locator('#entity-results button[title="B"]').click();
+    assert.equal(await page.locator('#edit-entity-name').inputValue(), 'B');
+    assert.match(await page.locator('#edit-entity-error').textContent(), /apply or discard/i);
+    await page.locator('#discard-entity-draft').click();
+    await page.locator('#new-dependency-name').fill(' A');
+    await page.locator('#add-dependency-form button[type=submit]').click();
+    assert.match(await page.locator('#dependency-error').textContent(), /whitespace/i);
+    assert.equal(await page.locator('#download-document').isDisabled(), true);
+    await page.locator('#discard-dependency-draft').click();
+    assert.equal(await page.locator('#download-document').isDisabled(), false);
+    await page.locator('#entity-results button[title="B"]').click();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'B');
+  } finally {
+    await browser.close();
+  }
+});
+
 test('protects invalid drafts and unsaved changes while supporting undo and redo', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -105,6 +135,8 @@ test('protects invalid drafts and unsaved changes while supporting undo and redo
     await page.locator('#edit-entity-name').fill('C');
     await page.locator('#edit-entity-form button[type=submit]').click();
     assert.match(await page.locator('#edit-entity-error').textContent(), /apply or discard/i);
+    assert.equal(await page.locator('#download-document').isDisabled(), true);
+    await page.locator('#discard-entity-draft').click();
     await page.locator('#apply-document').click();
     assert.match(await page.locator('#graph-summary').textContent(), /B/);
     await page.locator('#undo-document').click();
