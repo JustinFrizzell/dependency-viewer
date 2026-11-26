@@ -1820,6 +1820,285 @@ test('downloaded Entity edits reload with saved state and support undo and redo'
   }
 });
 
+test('adding a JSON-valued Entity property updates details and the Document', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
+  try {
+    const document = dom.window.document;
+    document.getElementById('metadata-entity').value = 'A';
+    document.getElementById('metadata-entity').dispatchEvent(new dom.window.Event('change'));
+    document.getElementById('metadata-key').value = 'tags';
+    const value = document.getElementById('metadata-value');
+    value.value = '["one", true, null, 2]';
+    value.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    document.getElementById('metadata-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0].tags, [
+      'one',
+      true,
+      null,
+      2,
+    ]);
+    assert.match(document.getElementById('selection-status').textContent, /tags/);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('invalid property drafts cannot be applied or downloaded', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
+  try {
+    const document = dom.window.document;
+    const initial = document.getElementById('document-json').value;
+    const key = document.getElementById('metadata-key');
+    const value = document.getElementById('metadata-value');
+    const form = document.getElementById('metadata-form');
+    key.value = 'metadata';
+    key.dispatchEvent(new dom.window.Event('input'));
+    for (const raw of ['1,"other":2', '{"x":1,"x":2}', '9007199254740993', '{']) {
+      value.value = raw;
+      value.dispatchEvent(new dom.window.Event('input'));
+      form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+      assert.match(document.getElementById('metadata-error').textContent, /error/i);
+      assert.equal(document.getElementById('document-json').value, initial);
+      assert.equal(document.getElementById('download-document').disabled, true);
+      assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    }
+    document.getElementById('metadata-discard').click();
+    assert.equal(document.getElementById('download-document').disabled, false);
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('a rejected empty property draft remains unsaved until discarded', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
+  try {
+    const document = dom.window.document;
+    document.getElementById('metadata-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+    assert.match(document.getElementById('metadata-error').textContent, /error/i);
+    assert.equal(document.getElementById('download-document').disabled, true);
+    document.getElementById('metadata-discard').click();
+    assert.equal(document.getElementById('download-document').disabled, false);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('properties preserve unusual keys and types through edit, removal and history', () => {
+  const raw =
+    '{"top":{"n":12.5},"entities":[{"name":"A","dependencies":["missing","missing"],"keep":true,"__proto__":{"x":1}},{"name":"B","dependencies":[],"untouched":null}]}';
+  const dom = open({ raw });
+  try {
+    const { document, Event } = dom.window;
+    const key = document.getElementById('metadata-key');
+    const value = document.getElementById('metadata-value');
+    const property = document.getElementById('metadata-property');
+    const form = document.getElementById('metadata-form');
+    const submit = () => form.dispatchEvent(new Event('submit', { cancelable: true }));
+    const choose = (name) => {
+      property.value = [...property.options].find((option) => option.textContent === name).value;
+      property.dispatchEvent(new Event('change'));
+    };
+    const current = () => JSON.parse(document.getElementById('document-json').value);
+    choose('__proto__');
+    value.value = '{"html":"<img src=x onerror=alert(1)>","nested":[false,null,3.5]}';
+    value.dispatchEvent(new Event('input'));
+    submit();
+    assert.deepEqual(current().entities[0].__proto__, {
+      html: '<img src=x onerror=alert(1)>',
+      nested: [false, null, 3.5],
+    });
+    assert.equal(document.querySelector('#selection-status img'), null);
+    assert.match(document.getElementById('selection-status').textContent, /<img src=x/);
+    choose('__proto__');
+    document.getElementById('metadata-remove').click();
+    assert.equal(Object.hasOwn(current().entities[0], '__proto__'), false);
+    document.getElementById('undo-document').click();
+    assert.equal(Object.hasOwn(current().entities[0], '__proto__'), true);
+    document.getElementById('redo-document').click();
+    assert.equal(Object.hasOwn(current().entities[0], '__proto__'), false);
+    key.value = '__proto__';
+    key.dispatchEvent(new Event('input'));
+    value.value = '"new"';
+    value.dispatchEvent(new Event('input'));
+    submit();
+    assert.equal(current().entities[0].__proto__, 'new');
+    assert.deepEqual(current().entities[0].dependencies, ['missing', 'missing']);
+    assert.deepEqual(current().entities[1], { name: 'B', dependencies: [], untouched: null });
+    assert.deepEqual(current().top, { n: 12.5 });
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('property edits reject reserved and duplicate keys and conflict with JSON drafts', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: [], existing: 1 }] }));
+  try {
+    const { document, Event } = dom.window;
+    const key = document.getElementById('metadata-key');
+    const value = document.getElementById('metadata-value');
+    const form = document.getElementById('metadata-form');
+    const submit = () => form.dispatchEvent(new Event('submit', { cancelable: true }));
+    value.value = 'false';
+    value.dispatchEvent(new Event('input'));
+    for (const name of ['name', 'dependencies', 'description', 'existing']) {
+      key.value = name;
+      key.dispatchEvent(new Event('input'));
+      submit();
+      assert.match(document.getElementById('metadata-error').textContent, /cannot|already exists/i);
+      assert.equal(JSON.parse(document.getElementById('document-json').value).entities[0].name, 'A');
+    }
+    document.getElementById('metadata-discard').click();
+    const editor = document.getElementById('document-json');
+    editor.value = '{"entities":[{"name":"B","dependencies":[]}]}';
+    editor.dispatchEvent(new Event('input'));
+    key.value = 'ok';
+    key.dispatchEvent(new Event('input'));
+    value.value = 'true';
+    value.dispatchEvent(new Event('input'));
+    submit();
+    assert.match(document.getElementById('metadata-error').textContent, /apply or discard.*draft/i);
+    assert.equal(document.getElementById('apply-document').disabled, true);
+    document.getElementById('metadata-discard').click();
+    document.getElementById('apply-document').click();
+    assert.equal(JSON.parse(editor.value).entities[0].name, 'B');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('JSON-valued properties survive download and reload without changing unrelated data', async () => {
+  const raw = '{"meta":{"value":0.125},"entities":[{"name":"A","dependencies":["missing","missing"],"keep":"yes"}]}';
+  const dom = open(template(), [], true);
+  try {
+    const { document, Event, FileReader } = dom.window;
+    document.getElementById('paste-json').value = raw;
+    document.getElementById('open-paste').click();
+    const key = document.getElementById('metadata-key');
+    const value = document.getElementById('metadata-value');
+    for (const [name, json] of [
+      ['', '"text"'],
+      ['number', '42.5'],
+      ['constructor', 'false'],
+      ['nil', 'null'],
+      ['array', '[1,"x"]'],
+      ['object', '{"nested":true}'],
+    ]) {
+      key.value = name;
+      key.dispatchEvent(new Event('input'));
+      value.value = json;
+      value.dispatchEvent(new Event('input'));
+      document.getElementById('metadata-form').dispatchEvent(new Event('submit', { cancelable: true }));
+      assert.equal(document.getElementById('metadata-error').textContent, '');
+    }
+    let blob;
+    dom.window.URL.createObjectURL = (data) => ((blob = data), 'blob:document');
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = () => {};
+    document.getElementById('download-document').click();
+    const saved = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(blob);
+    });
+    const expected = {
+      meta: { value: 0.125 },
+      entities: [
+        {
+          name: 'A',
+          dependencies: ['missing', 'missing'],
+          keep: 'yes',
+          '': 'text',
+          number: 42.5,
+          constructor: false,
+          nil: null,
+          array: [1, 'x'],
+          object: { nested: true },
+        },
+      ],
+    };
+    assert.deepEqual(JSON.parse(saved), expected);
+    document.getElementById('undo-document').click();
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    document.getElementById('redo-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    document.getElementById('paste-json').value = saved;
+    document.getElementById('open-paste').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), expected);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('property drafts protect against replacement, leaving and other graph edits', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
+  try {
+    const { document, Event } = dom.window;
+    document.getElementById('metadata-value').value = '{';
+    document.getElementById('metadata-value').dispatchEvent(new Event('input'));
+    const leaving = new Event('beforeunload', { cancelable: true });
+    dom.window.dispatchEvent(leaving);
+    assert.equal(leaving.defaultPrevented, true);
+    dom.window.confirm = () => false;
+    document.getElementById('paste-json').value = '{"entities":[]}';
+    document.getElementById('open-paste').click();
+    assert.match(document.getElementById('graph-summary').textContent, /A/);
+    document.getElementById('new-entity-name').value = 'B';
+    document.getElementById('add-entity-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    assert.match(document.getElementById('add-entity-error').textContent, /property draft/i);
+    document.getElementById('metadata-discard').click();
+    document.getElementById('add-entity-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    assert.match(document.getElementById('graph-summary').textContent, /B/);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('property drafts block Entity edits and settings changes', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    document.getElementById('metadata-value').value = '{';
+    document.getElementById('metadata-value').dispatchEvent(new Event('input'));
+    document.getElementById('edit-entity-name').value = 'B';
+    document.getElementById('edit-entity-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    assert.match(document.getElementById('edit-entity-error').textContent, /property draft/i);
+    document.getElementById('delete-entity').click();
+    document.getElementById('delete-entity-remove').click();
+    assert.match(document.getElementById('edit-entity-error').textContent, /property draft/i);
+    document.getElementById('colours-enabled').click();
+    assert.match(document.getElementById('colour-error').textContent, /property draft/i);
+    document.getElementById('compact-nodes').click();
+    assert.match(document.getElementById('presentation-error').textContent, /property draft/i);
+    assert.equal(JSON.parse(document.getElementById('document-json').value).entities[0].name, 'A');
+    assert.equal(document.getElementById('metadata-value').value, '{');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('property drafts block Direct dependency edits without losing the draft', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: ['missing'] }] }));
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const value = document.getElementById('metadata-value');
+    value.value = '{';
+    value.dispatchEvent(new Event('input'));
+    document.getElementById('new-dependency-name').value = 'other';
+    document.getElementById('add-dependency-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    assert.match(document.getElementById('dependency-error').textContent, /property draft/i);
+    document.querySelector('[aria-label="Remove Direct dependency missing"]').click();
+    assert.match(document.getElementById('dependency-error').textContent, /property draft/i);
+    assert.equal(value.value, '{');
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0].dependencies, ['missing']);
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('typing in the middle of a JSON draft keeps the caret in place', () => {
   const dom = open({ raw: '{"entities":[]}' });
   try {
