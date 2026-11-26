@@ -1,8 +1,14 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { setupEdgeMotion } = require('../src/edge-motion');
+import { test } from 'node:test';
+import * as assert from 'node:assert/strict';
+import type { Core } from 'cytoscape';
+import { setupEdgeMotion } from '../src/edge-motion';
 
 class FakeButton {
+  disabled: boolean;
+  textContent: string;
+  attributes: Map<string, string>;
+  listeners: Map<string, () => void>;
+
   constructor() {
     this.disabled = false;
     this.textContent = '';
@@ -10,61 +16,67 @@ class FakeButton {
     this.listeners = new Map();
   }
 
-  addEventListener(type, listener) {
+  addEventListener(type: string, listener: () => void) {
     this.listeners.set(type, listener);
   }
 
-  setAttribute(name, value) {
+  setAttribute(name: string, value: string) {
     this.attributes.set(name, value);
   }
 
   click() {
-    this.listeners.get('click')();
+    this.listeners.get('click')!();
   }
 }
 
 function fixture({ reducedMotion = false, hidden = false } = {}) {
-  const frames = new Map();
-  const motionListeners = new Map();
-  const documentListeners = new Map();
+  const frames = new Map<number, (timestamp: number) => void>();
+  const motionListeners = new Map<string, (event: { matches: boolean }) => void>();
+  const documentListeners = new Map<string, () => void>();
   let frameId = 0;
-  const offsets = [];
+  const offsets: number[] = [];
   const window = {
     matchMedia: () => ({
       matches: reducedMotion,
-      addEventListener: (name, listener) => motionListeners.set(name, listener),
-      removeEventListener: (name) => motionListeners.delete(name),
+      addEventListener: (name: string, listener: (event: { matches: boolean }) => void) =>
+        motionListeners.set(name, listener),
+      removeEventListener: (name: string) => motionListeners.delete(name),
     }),
-    requestAnimationFrame: (callback) => {
+    requestAnimationFrame: (callback: (timestamp: number) => void) => {
       frameId += 1;
       frames.set(frameId, callback);
       return frameId;
     },
-    cancelAnimationFrame: (id) => frames.delete(id),
+    cancelAnimationFrame: (id: number) => frames.delete(id),
   };
   const document = {
     hidden,
-    addEventListener: (name, listener) => documentListeners.set(name, listener),
-    removeEventListener: (name) => documentListeners.delete(name),
+    addEventListener: (name: string, listener: () => void) => documentListeners.set(name, listener),
+    removeEventListener: (name: string) => documentListeners.delete(name),
   };
   const visibleEdges = {
-    style: (property, value) => {
+    style: (property: string, value: number) => {
       assert.equal(property, 'line-dash-offset');
       offsets.push(value);
     },
   };
   const graph = {
     edges: () => ({
-      not: (selector) => {
+      not: (selector: string) => {
         assert.equal(selector, '.filtered-out');
         return visibleEdges;
       },
     }),
   };
   const button = new FakeButton();
-  const cleanup = setupEdgeMotion(window, document, graph, button);
+  const cleanup = setupEdgeMotion(
+    window as unknown as Window,
+    document as unknown as Document,
+    graph as unknown as Core,
+    button as unknown as HTMLButtonElement,
+  );
 
-  const runFrame = (timestamp) => {
+  const runFrame = (timestamp: number) => {
     const callback = [...frames.values()][0];
     assert.ok(callback);
     frames.clear();
@@ -79,11 +91,11 @@ function fixture({ reducedMotion = false, hidden = false } = {}) {
     cleanup,
     motionListeners,
     documentListeners,
-    emitVisibility: (hiddenNow) => {
+    emitVisibility: (hiddenNow: boolean) => {
       document.hidden = hiddenNow;
-      documentListeners.get('visibilitychange')();
+      documentListeners.get('visibilitychange')!();
     },
-    emitMotionPreference: (matches) => motionListeners.get('change')({ matches }),
+    emitMotionPreference: (matches: boolean) => motionListeners.get('change')!({ matches }),
   };
 }
 

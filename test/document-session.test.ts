@@ -1,8 +1,8 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { createDocumentSession } = require('../src/document-session');
+import { test } from 'node:test';
+import * as assert from 'node:assert/strict';
+import { createDocumentSession } from '../src/document-session';
 
-const documentWith = (name) => JSON.stringify({ entities: [{ name, dependencies: [] }] });
+const documentWith = (name: string) => JSON.stringify({ entities: [{ name, dependencies: [] }] });
 
 test('shared graph edits must resolve a draft and participate in history and saved state', () => {
   const session = createDocumentSession(JSON.parse(documentWith('A')));

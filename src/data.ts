@@ -1,11 +1,11 @@
-/** @param {string} raw @returns {import('./document-types').Graph} */
-function parseDependency(raw) {
+import type { DependencyDocument, Graph, GraphEntity } from './document-types';
+
+export function parseDependency(raw: string): Graph {
   const data = parseDocument(raw);
   return deriveGraph(data);
 }
 
-/** @param {string} raw @returns {import('./document-types').DependencyDocument} */
-function parseDocument(raw) {
+export function parseDocument(raw: string): DependencyDocument {
   const data = JSON.parse(raw);
   try {
     inspectJson(raw);
@@ -20,8 +20,7 @@ function parseDocument(raw) {
   return data;
 }
 
-/** @param {string} raw */
-function inspectJson(raw) {
+function inspectJson(raw: string) {
   let position = 0;
   const whitespace = () => {
     while (/\s/.test(raw[position] || '') && position < raw.length) position++;
@@ -35,8 +34,7 @@ function inspectJson(raw) {
     position++;
     return JSON.parse(raw.slice(start, position));
   }
-  /** @param {string} value */
-  function decimal(value) {
+  function decimal(value: string) {
     const match = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(value);
     if (!match) throw new Error('Invalid JSON number.');
     let digits = (match[2] + (match[3] || '')).replace(/^0+/, '');
@@ -94,14 +92,12 @@ function inspectJson(raw) {
   value();
 }
 
-/** @param {import('./document-types').DependencyDocument} data @returns {import('./document-types').Graph} */
-function deriveGraph(data) {
+export function deriveGraph(data: DependencyDocument): Graph {
   if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.entities)) {
     throw new Error('Expected an object with an entities array.');
   }
   const names = new Set();
-  /** @param {unknown} name */
-  const validName = (name) => typeof name === 'string' && name.length > 0 && name.trim() === name;
+  const validName = (name: unknown) => typeof name === 'string' && name.length > 0 && name.trim() === name;
   for (const entity of data.entities) {
     if (
       !entity ||
@@ -119,8 +115,7 @@ function deriveGraph(data) {
     if (names.has(entity.name)) throw new Error(`Duplicate entity: ${entity.name}`);
     names.add(entity.name);
   }
-  /** @type {import('./document-types').GraphEntity[]} */
-  const entities = data.entities.map((entity) => ({
+  const entities: GraphEntity[] = data.entities.map((entity) => ({
     name: entity.name,
     description: entity.description,
     dependencies: [...new Set(entity.dependencies)],
@@ -138,21 +133,18 @@ function deriveGraph(data) {
     }
   }
   const incoming = new Map(entities.map((entity) => [entity.name, 0]));
-  /** @type {Map<string, string[]>} */
-  const downstream = new Map(entities.map((entity) => [entity.name, []]));
+  const downstream = new Map<string, string[]>(entities.map((entity) => [entity.name, []]));
   for (const edge of edges) {
-    incoming.set(edge.target, /** @type {number} */ (incoming.get(edge.target)) + 1);
-    /** @type {string[]} */ (downstream.get(edge.source)).push(edge.target);
+    incoming.set(edge.target, incoming.get(edge.target)! + 1);
+    downstream.get(edge.source)!.push(edge.target);
   }
   const ready = entities.filter((entity) => incoming.get(entity.name) === 0).map((entity) => entity.name);
   for (let i = 0; i < ready.length; i++) {
-    for (const target of /** @type {string[]} */ (downstream.get(ready[i]))) {
-      incoming.set(target, /** @type {number} */ (incoming.get(target)) - 1);
+    for (const target of downstream.get(ready[i])!) {
+      incoming.set(target, incoming.get(target)! - 1);
       if (incoming.get(target) === 0) ready.push(target);
     }
   }
   if (ready.length !== entities.length) throw new Error('Dependency graph contains a cycle.');
   return { entities, edges };
 }
-
-module.exports = { parseDependency, parseDocument, deriveGraph };

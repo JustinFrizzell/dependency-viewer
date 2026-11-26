@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2020",
+    "lib": ["ES2022", "DOM"],
     "module": "commonjs",
-    "allowJs": true,
-    "checkJs": true,
+    "strict": true,
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src/data.js", "src/document-types.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "webpack.config.ts"]
 }

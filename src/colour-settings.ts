@@ -1,3 +1,21 @@
+import type { Core } from 'cytoscape';
+import type { JsonValue } from './document-types';
+
+interface ColourRule {
+  name: string;
+  colour: string;
+  text: string;
+}
+
+interface ColourOverrides {
+  enabled?: boolean;
+  order?: string[];
+  texts?: Record<string, string>;
+}
+
+type ColourDocument = { settings?: JsonValue };
+type ColourParent = { colours?: ColourOverrides };
+
 const defaults = [
   { name: 'bronze', colour: '#e9c9ad', text: 'bronze' },
   { name: 'silver', colour: '#dce3e8', text: 'silver' },
@@ -7,11 +25,12 @@ const defaults = [
   { name: 'purple', colour: '#e6d8f2', text: '' },
 ];
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
-const has = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key);
 
-function readColourSettings(data) {
-  const settings = data.settings;
+function readColourSettings(data: ColourDocument): { enabled: boolean; rules: ColourRule[] } {
+  const settings = data.settings as ColourParent | undefined;
   if (has(data, 'settings') && !isObject(settings)) throw new Error('Document settings conflict with colour settings.');
   const colours = settings && settings.colours;
   if (settings && has(settings, 'colours')) {
@@ -34,40 +53,44 @@ function readColourSettings(data) {
     }
   }
   return {
-    enabled: colours && has(colours, 'enabled') ? colours.enabled : true,
-    rules: (colours && has(colours, 'order') ? colours.order : defaults.map((rule) => rule.name)).map((name) => {
-      const rule = defaults.find((item) => item.name === name);
+    enabled: colours && has(colours, 'enabled') ? colours.enabled! : true,
+    rules: (colours && has(colours, 'order') ? colours.order! : defaults.map((rule) => rule.name)).map((name) => {
+      const rule = defaults.find((item) => item.name === name)!;
       return { ...rule, text: colours && colours.texts && has(colours.texts, name) ? colours.texts[name] : rule.text };
     }),
   };
 }
 
-function writeColourSettings(data, enabled, rules) {
+export function writeColourSettings(data: ColourDocument, enabled: boolean, rules: ColourRule[]) {
   readColourSettings(data);
-  const override = {};
+  const override: ColourOverrides = {};
   if (!enabled) override.enabled = false;
   const order = rules.map((rule) => rule.name);
   if (JSON.stringify(order) !== JSON.stringify(defaults.map((rule) => rule.name))) override.order = order;
-  const texts = {};
+  const texts: Record<string, string> = {};
   for (const rule of rules) {
-    if (rule.text !== defaults.find((item) => item.name === rule.name).text) texts[rule.name] = rule.text;
+    if (rule.text !== defaults.find((item) => item.name === rule.name)!.text) texts[rule.name] = rule.text;
   }
   if (Object.keys(texts).length) override.texts = texts;
   if (Object.keys(override).length) {
     if (!has(data, 'settings')) data.settings = {};
-    data.settings.colours = override;
-  } else if (data.settings && has(data.settings, 'colours')) {
-    delete data.settings.colours;
-    if (!Object.keys(data.settings).length) delete data.settings;
+    (data.settings as ColourParent).colours = override;
+  } else if (data.settings && has(data.settings as ColourParent, 'colours')) {
+    delete (data.settings as ColourParent).colours;
+    if (!Object.keys(data.settings as ColourParent).length) delete data.settings;
   }
   return data;
 }
 
-function setupColourSettings(document, graph, options = {}) {
-  const panel = document.getElementById('colour-settings');
-  const list = document.getElementById('colour-rules');
-  const enabled = document.getElementById('colours-enabled');
-  const error = document.getElementById('colour-error');
+export function setupColourSettings(
+  document: Document,
+  graph: Core,
+  options: { data?: ColourDocument; change?: (enabled: boolean, rules: ColourRule[]) => void } = {},
+) {
+  const panel = document.getElementById('colour-settings')!;
+  const list = document.getElementById('colour-rules')!;
+  const enabled = document.getElementById('colours-enabled') as HTMLInputElement;
+  const error = document.getElementById('colour-error')!;
   let rules = defaults.map((rule) => ({ ...rule }));
   let conflict = false;
 
@@ -77,7 +100,7 @@ function setupColourSettings(document, graph, options = {}) {
       error.textContent = '';
       return true;
     } catch (problem) {
-      error.textContent = problem.message;
+      error.textContent = (problem as Error).message;
       return false;
     }
   }
@@ -94,9 +117,9 @@ function setupColourSettings(document, graph, options = {}) {
     });
   }
 
-  function renderRules(focusName, focusDirection) {
+  function renderRules(focusName?: string, focusDirection?: string) {
     list.replaceChildren();
-    let focusTarget;
+    let focusTarget: HTMLElement | undefined;
     for (const [index, rule] of rules.entries()) {
       const row = document.createElement('div');
       row.className = 'colour-rule';
@@ -120,7 +143,7 @@ function setupColourSettings(document, graph, options = {}) {
       for (const [direction, offset, symbol] of [
         ['up', -1, '↑'],
         ['down', 1, '↓'],
-      ]) {
+      ] as const) {
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = symbol;
@@ -155,7 +178,7 @@ function setupColourSettings(document, graph, options = {}) {
     if (commit()) applyColours();
     else enabled.checked = !enabled.checked;
   });
-  document.getElementById('reset-colours').addEventListener('click', () => {
+  document.getElementById('reset-colours')!.addEventListener('click', () => {
     const previous = rules;
     const previousEnabled = enabled.checked;
     rules = defaults.map((rule) => ({ ...rule }));
@@ -168,7 +191,7 @@ function setupColourSettings(document, graph, options = {}) {
     renderRules();
     applyColours();
   });
-  function update(data = {}) {
+  function update(data: ColourDocument = {}) {
     try {
       const state = readColourSettings(data);
       rules = state.rules;
@@ -179,10 +202,10 @@ function setupColourSettings(document, graph, options = {}) {
       rules = defaults.map((rule) => ({ ...rule }));
       enabled.checked = true;
       conflict = true;
-      error.textContent = problem.message;
+      error.textContent = (problem as Error).message;
     }
     enabled.disabled = conflict;
-    document.getElementById('reset-colours').disabled = conflict;
+    (document.getElementById('reset-colours') as HTMLButtonElement).disabled = conflict;
     renderRules();
     applyColours();
   }
@@ -190,5 +213,3 @@ function setupColourSettings(document, graph, options = {}) {
   panel.hidden = false;
   return { update };
 }
-
-module.exports = { setupColourSettings, writeColourSettings };

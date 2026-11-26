@@ -1,15 +1,17 @@
+import type { Core } from 'cytoscape';
+
 const DASH_CYCLE = 14;
 const CYCLE_DURATION = 1000;
 
-function setupEdgeMotion(window, document, graph, button) {
-  const motionPreference = window.matchMedia
+export function setupEdgeMotion(window: Window, document: Document, graph: Core, button: HTMLButtonElement) {
+  const motionPreference: Partial<MediaQueryList> & Pick<MediaQueryList, 'matches'> = window.matchMedia
     ? window.matchMedia('(prefers-reduced-motion: reduce)')
     : { matches: false };
   let manuallyPaused = false;
   let systemReducedMotion = motionPreference.matches;
   let dashOffset = 0;
-  let lastTimestamp = null;
-  let animationFrame = null;
+  let lastTimestamp: number | null = null;
+  let animationFrame: number | null = null;
 
   const shouldAnimate = () => !manuallyPaused && !systemReducedMotion && !document.hidden;
 
@@ -19,7 +21,7 @@ function setupEdgeMotion(window, document, graph, button) {
     lastTimestamp = null;
   }
 
-  function tick(timestamp) {
+  function tick(timestamp: number) {
     animationFrame = null;
     if (!shouldAnimate()) return;
     if (lastTimestamp !== null) {
@@ -60,7 +62,7 @@ function setupEdgeMotion(window, document, graph, button) {
     else start();
   };
   document.addEventListener('visibilitychange', handleVisibility);
-  const handleMotionPreference = (event) => {
+  const handleMotionPreference = (event: MediaQueryListEvent) => {
     systemReducedMotion = event.matches;
     if (systemReducedMotion) stop();
     updateButton();
@@ -78,5 +80,3 @@ function setupEdgeMotion(window, document, graph, button) {
     else if (motionPreference.removeListener) motionPreference.removeListener(handleMotionPreference);
   };
 }
-
-module.exports = { setupEdgeMotion };

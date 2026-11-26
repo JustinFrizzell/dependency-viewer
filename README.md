@@ -4,7 +4,7 @@ Build a standalone HTML viewer for exploring dependencies between entities, incl
 
 ## Build the HTML viewer
 
-Use Node.js 18 or newer:
+Use Node.js 24 or newer:
 
 ```sh
 npm ci

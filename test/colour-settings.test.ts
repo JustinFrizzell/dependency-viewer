@@ -1,11 +1,11 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const { JSDOM } = require('jsdom');
-const cytoscape = require('cytoscape');
-const { setupColourSettings } = require('../src/colour-settings');
+import { test, type TestContext } from 'node:test';
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import { JSDOM } from 'jsdom';
+import cytoscape = require('cytoscape');
+import { setupColourSettings } from '../src/colour-settings';
 
-function open(t) {
+function open(t: TestContext) {
   const dom = new JSDOM(fs.readFileSync('src/index.html', 'utf8'));
   const graph = cytoscape({
     headless: true,
@@ -42,21 +42,21 @@ function open(t) {
   return { dom, document: dom.window.document, graph };
 }
 
-function input(dom, label, value) {
-  const element = dom.window.document.querySelector(`input[aria-label="${label}"]`);
+function input(dom: JSDOM, label: string, value: string) {
+  const element = dom.window.document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
   element.value = value;
   element.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 }
 
-function click(document, label) {
-  document.querySelector(`button[aria-label="${label}"]`).click();
+function click(document: Document, label: string) {
+  document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click();
 }
 
 test('colours match full names case-insensitively and preserve status borders', (t) => {
   const { dom, document, graph } = open(t);
   const overlap = graph.getElementById('overlap');
   const other = graph.getElementById('other');
-  assert.equal(document.getElementById('colour-settings').hidden, false);
+  assert.equal(document.getElementById('colour-settings')!.hidden, false);
   assert.equal(overlap.style('background-color'), 'rgb(233,201,173)');
   assert.equal(overlap.style('border-style'), 'dashed');
   assert.equal(overlap.style('border-color'), 'rgb(22,138,128)');
@@ -77,23 +77,23 @@ test('reordering changes priority and moves each colour with its text', (t) => {
   click(document, 'Move gold colour up');
   click(document, 'Move gold colour up');
   assert.equal(overlap.style('background-color'), 'rgb(249,227,161)');
-  assert.equal(document.querySelector('#colour-rules input').value, 'GOLD');
-  assert.equal(document.querySelector('button[aria-label="Move gold colour up"]').disabled, true);
+  assert.equal(document.querySelector<HTMLInputElement>('#colour-rules input')!.value, 'GOLD');
+  assert.equal(document.querySelector<HTMLButtonElement>('button[aria-label="Move gold colour up"]')!.disabled, true);
 
-  document.getElementById('reset-colours').click();
+  document.getElementById('reset-colours')!.click();
   assert.equal(overlap.style('background-color'), 'rgb(233,201,173)');
-  assert.equal(document.querySelector('#colour-rules input').value, 'bronze');
-  assert.equal(document.querySelector('input[aria-label="Text for gold colour"]').value, 'gold');
+  assert.equal(document.querySelector<HTMLInputElement>('#colour-rules input')!.value, 'bronze');
+  assert.equal(document.querySelector<HTMLInputElement>('input[aria-label="Text for gold colour"]')!.value, 'gold');
 });
 
 test('turning colours off restores existing fills and reset turns them back on', (t) => {
   const { document, graph } = open(t);
   const overlap = graph.getElementById('overlap');
   const silver = graph.getElementById('silver');
-  document.getElementById('colours-enabled').click();
+  document.getElementById('colours-enabled')!.click();
   assert.equal(overlap.style('background-color'), 'rgb(255,249,236)');
   assert.equal(silver.style('background-color'), 'rgb(255,255,255)');
-  document.getElementById('reset-colours').click();
-  assert.equal(document.getElementById('colours-enabled').checked, true);
+  document.getElementById('reset-colours')!.click();
+  assert.equal((document.getElementById('colours-enabled') as HTMLInputElement).checked, true);
   assert.equal(overlap.style('background-color'), 'rgb(233,201,173)');
 });
