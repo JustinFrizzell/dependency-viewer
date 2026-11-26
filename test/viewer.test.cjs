@@ -113,6 +113,7 @@ test('new files reset the viewer, while invalid files preserve it', () => {
     assert.equal(document.getElementById('graph-summary').textContent, summary);
     assert.equal(document.querySelector('#selection-status h2').textContent, 'first');
     assert.equal(document.querySelector('[data-view="downstream"]').getAttribute('aria-pressed'), 'true');
+    dom.window.confirm = () => true;
     loadFile(dom, data, 'first.json');
     assert.equal(document.getElementById('file-panel').hidden, true);
     assert.equal(document.getElementById('file-error').textContent, '');
@@ -1580,6 +1581,150 @@ test('typing in the middle of a JSON draft keeps the caret in place', () => {
     editor.setSelectionRange(2, 2);
     editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     assert.equal(editor.selectionStart, 2);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('colour changes are saved in the Document and restored when reopened offline', () => {
+  const dom = open({ raw: '{"entities":[{"name":"raw","dependencies":[]}],"extra":{"keep":true}}' });
+  try {
+    const { document, Event } = dom.window;
+    document.getElementById('settings-entry').click();
+    const blue = document.querySelector('input[aria-label="Text for blue colour"]');
+    blue.value = 'raw';
+    blue.dispatchEvent(new Event('input', { bubbles: true }));
+    const saved = document.getElementById('document-json').value;
+    assert.deepEqual(JSON.parse(saved).extra, { keep: true });
+    assert.deepEqual(JSON.parse(saved).settings.colours, { texts: { blue: 'raw' } });
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    dom.window.confirm = () => true;
+    loadFile(dom, saved);
+    document.getElementById('settings-entry').click();
+    assert.equal(document.querySelector('input[aria-label="Text for blue colour"]').value, 'raw');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('colour edits require resolving a JSON draft and retain the draft on rejection', () => {
+  const dom = open({ raw: '{"entities":[{"name":"raw","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    const editor = document.getElementById('document-json');
+    editor.value = '{invalid';
+    editor.dispatchEvent(new Event('input'));
+    const blue = document.querySelector('input[aria-label="Text for blue colour"]');
+    blue.value = 'raw';
+    blue.dispatchEvent(new Event('input'));
+    assert.equal(blue.value, '');
+    assert.equal(editor.value, '{invalid');
+    assert.match(document.getElementById('colour-error').textContent, /apply or discard/i);
+    document.getElementById('discard-document').click();
+    blue.value = 'raw';
+    blue.dispatchEvent(new Event('input'));
+    assert.equal(JSON.parse(editor.value).settings.colours.texts.blue, 'raw');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('colour priority and reset participate in history without persisting view state', () => {
+  const dom = open({ raw: '{"entities":[{"name":"bronze.gold","dependencies":[]}],"settings":{"other":42}}' });
+  try {
+    const { document, Event } = dom.window;
+    const editor = document.getElementById('document-json');
+    const json = () => JSON.parse(editor.value);
+    document.querySelector('#entity-results button').click();
+    const filter = document.getElementById('graph-filter');
+    filter.value = 'bronze';
+    filter.dispatchEvent(new Event('input'));
+    document.querySelector('button[aria-label="Move gold colour up"]').click();
+    document.querySelector('button[aria-label="Move gold colour up"]').click();
+    assert.equal(json().settings.colours.order[0], 'gold');
+    assert.equal(json().settings.other, 42);
+    assert.equal(json().filter, undefined);
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'bronze.gold');
+    assert.equal(filter.value, 'bronze');
+    document.getElementById('undo-document').click();
+    assert.equal(json().settings.colours.order[0], 'bronze');
+    assert.equal(document.querySelector('#selection-status h2').textContent, 'bronze.gold');
+    document.getElementById('redo-document').click();
+    assert.equal(json().settings.colours.order[0], 'gold');
+    document.getElementById('reset-colours').click();
+    assert.deepEqual(json().settings, { other: 42 });
+    document.getElementById('undo-document').click();
+    assert.equal(json().settings.colours.order[0], 'gold');
+    document.getElementById('reset-colours').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('conflicting settings are explained and never overwritten', () => {
+  for (const settings of ['foreign', { colours: { custom: 'data' }, other: 7 }, { colours: { rules: [] } }]) {
+    const original = { entities: [], settings, extra: ['preserve'] };
+    const dom = open({ raw: JSON.stringify(original) });
+    try {
+      const { document } = dom.window;
+      document.getElementById('settings-entry').click();
+      assert.match(document.getElementById('colour-error').textContent, /conflict/i);
+      assert.equal(document.getElementById('colours-enabled').disabled, true);
+      assert.equal(document.getElementById('reset-colours').disabled, true);
+      assert.deepEqual(JSON.parse(document.getElementById('document-json').value), original);
+    } finally {
+      dom.window.close();
+    }
+  }
+});
+
+test('downloaded colour overrides reload offline and undo returns to the saved state', async () => {
+  const dom = open(template(), [], true);
+  try {
+    const { document, FileReader } = dom.window;
+    document.getElementById('paste-json').value = '{"entities":[{"name":"gold","dependencies":[]}]}';
+    document.getElementById('open-paste').click();
+    let blob;
+    let copied;
+    dom.window.URL.createObjectURL = (value) => {
+      blob = value;
+      return 'blob:document';
+    };
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = () => {};
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+      value: {
+        writeText: async (value) => {
+          copied = value;
+        },
+      },
+    });
+    document.getElementById('colours-enabled').click();
+    document.getElementById('copy-document').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.deepEqual(JSON.parse(copied).settings.colours, { enabled: false });
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    document.getElementById('download-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    const reader = new FileReader();
+    const downloaded = await new Promise((resolve) => {
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(blob);
+    });
+    assert.deepEqual(JSON.parse(downloaded), JSON.parse(copied));
+    document.getElementById('reset-colours').click();
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    document.getElementById('undo-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    const input = document.getElementById('dependency-file');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [new dom.window.File([downloaded], 'colours.json')],
+    });
+    input.dispatchEvent(new dom.window.Event('change'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 50));
+    assert.equal(document.getElementById('colours-enabled').checked, false);
   } finally {
     dom.window.close();
   }
