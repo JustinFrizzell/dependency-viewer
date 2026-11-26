@@ -270,6 +270,29 @@ main {
   flex: none;
   padding: 5px 7px;
 }
+.presentation-settings {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #d5e2e5;
+}
+.presentation-settings h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.presentation-settings label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.presentation-settings button {
+  justify-self: start;
+}
+#presentation-error:not(:empty) {
+  margin: 0;
+  color: #a32020;
+}
 #dependency-views:not([hidden]) {
   position: absolute;
   top: 20px;

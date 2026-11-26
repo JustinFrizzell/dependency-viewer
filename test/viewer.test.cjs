@@ -736,7 +736,8 @@ test('selecting a graph entity opens its inspector without changing the view', (
     const graph = document.getElementById('graph');
     const canvas = graph.querySelector('canvas');
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
-    assert.equal(graph.title, 'warehouse.orders');
+    assert.match(graph.title, /warehouse\.orders/);
+    assert.match(graph.title, /Order facts/);
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 0, clientY: 0 }));
     assert.equal(graph.hasAttribute('title'), false);
     document.getElementById('zoom-in').click();
@@ -745,6 +746,26 @@ test('selecting a graph entity opens its inspector without changing the view', (
     assert.match(inspector.textContent, /warehouse\.orders/);
     assert.match(inspector.textContent, /Order facts/);
     assert.equal(document.getElementById('zoom-level').textContent, zoom);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('Entity tooltips and accessible details show metadata as text', () => {
+  const hostile = '<img src=x onerror="window.injected=true">';
+  const dom = open(dataset({ entities: [{ name: hostile, description: hostile, owner: hostile, dependencies: [] }] }));
+  try {
+    const document = dom.window.document;
+    const graph = document.getElementById('graph');
+    graph
+      .querySelector('canvas')
+      .dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
+    assert.match(graph.title, /Description: <img/);
+    assert.match(graph.title, /owner: <img/);
+    document.querySelector('#entity-results button').click();
+    assert.match(document.getElementById('selection-status').textContent, /owner/);
+    assert.equal(document.querySelectorAll('#selection-status img').length, 0);
+    assert.equal(dom.window.injected, undefined);
   } finally {
     dom.window.close();
   }
@@ -1807,6 +1828,70 @@ test('typing in the middle of a JSON draft keeps the caret in place', () => {
     editor.setSelectionRange(2, 2);
     editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     assert.equal(editor.selectionStart, 2);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('appearance and tooltip preferences are Document edits restored on reopen and reset', () => {
+  const dom = open(dataset({ entities: [{ name: 'one', description: 'detail', dependencies: [] }] }));
+  try {
+    const document = dom.window.document;
+    document.getElementById('settings-entry').click();
+    document.getElementById('compact-nodes').click();
+    document.getElementById('tooltips-enabled').click();
+    const editor = document.getElementById('document-json');
+    const saved = editor.value;
+    assert.deepEqual(JSON.parse(saved).settings, { appearance: { compact: true }, tooltips: { enabled: false } });
+    const graph = document.getElementById('graph');
+    graph
+      .querySelector('canvas')
+      .dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
+    assert.equal(graph.hasAttribute('title'), false);
+    document.querySelector('#entity-results button').click();
+    assert.match(document.getElementById('selection-status').textContent, /detail/);
+    document.getElementById('undo-document').click();
+    assert.equal(document.getElementById('tooltips-enabled').checked, true);
+    document.getElementById('redo-document').click();
+    assert.equal(document.getElementById('tooltips-enabled').checked, false);
+    dom.window.confirm = () => true;
+    loadFile(dom, saved);
+    assert.equal(document.getElementById('compact-nodes').checked, true);
+    assert.equal(document.getElementById('tooltips-enabled').checked, false);
+    document.getElementById('reset-presentation').click();
+    assert.equal(JSON.parse(editor.value).settings, undefined);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('presentation settings protect drafts and conflicting existing JSON', () => {
+  const dom = open(dataset({ entities: [], settings: { other: 7 } }));
+  try {
+    const document = dom.window.document;
+    const editor = document.getElementById('document-json');
+    editor.value += ' ';
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    document.getElementById('compact-nodes').click();
+    assert.equal(document.getElementById('compact-nodes').checked, false);
+    assert.match(document.getElementById('presentation-error').textContent, /apply or discard/i);
+    assert.ok(editor.value.endsWith(' '));
+    document.getElementById('discard-document').click();
+    document.getElementById('compact-nodes').click();
+    assert.deepEqual(JSON.parse(editor.value).settings, { other: 7, appearance: { compact: true } });
+    document.getElementById('reset-presentation').click();
+    assert.deepEqual(JSON.parse(editor.value).settings, { other: 7 });
+
+    dom.window.confirm = () => true;
+    for (const settings of ['foreign', { appearance: { custom: 1 } }, { tooltips: { enabled: 'yes' } }]) {
+      const original = { entities: [], settings };
+      loadFile(dom, JSON.stringify(original));
+      assert.match(document.getElementById('presentation-error').textContent, /conflict.*preserved/i);
+      assert.equal(document.getElementById('compact-nodes').disabled, true);
+      assert.equal(document.getElementById('tooltips-enabled').disabled, true);
+      assert.equal(document.getElementById('reset-presentation').disabled, true);
+      assert.deepEqual(JSON.parse(editor.value), original);
+    }
   } finally {
     dom.window.close();
   }
