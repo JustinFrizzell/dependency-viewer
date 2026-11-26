@@ -1,14 +1,15 @@
-const { parseDocument } = require('./data');
+import { parseDocument } from './data';
+import type { DependencyDocument } from './document-types';
 
-function createDocumentSession(document) {
-  const serialize = (value) => JSON.stringify(value, null, 2);
+export function createDocumentSession(document: DependencyDocument) {
+  const serialize = (value: DependencyDocument) => JSON.stringify(value, null, 2);
   let history = [serialize(document)];
   let index = 0;
   let saved = history[0];
   let draft = history[0];
   const current = () => history[index];
   const hasDraft = () => draft !== current();
-  function replace(raw) {
+  function replace(raw: string) {
     if (hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
     const next = serialize(parseDocument(raw));
     if (next === current()) return;
@@ -20,7 +21,7 @@ function createDocumentSession(document) {
   return {
     current,
     draft: () => draft,
-    setDraft: (value) => {
+    setDraft: (value: string) => {
       draft = value;
     },
     hasDraft,
@@ -49,4 +50,4 @@ function createDocumentSession(document) {
   };
 }
 
-module.exports = { createDocumentSession };
+export type DocumentSession = ReturnType<typeof createDocumentSession>;

@@ -1,24 +1,34 @@
+import type { Core } from 'cytoscape';
+
 const MAX_SIDE = 8192;
 const MAX_PIXELS = 32000000;
 const PADDING = 40;
 
-async function addPadding(window, document, blob, image) {
+interface ExportSize {
+  width: number;
+  height: number;
+  graphWidth: number;
+  graphHeight: number;
+  padding: number;
+}
+
+async function addPadding(window: Window & typeof globalThis, document: Document, blob: Blob, image: ExportSize) {
   const sourceUrl = window.URL.createObjectURL(blob);
   try {
     const source = new window.Image();
-    await new Promise((resolve, reject) => {
-      source.onload = resolve;
+    await new Promise<void>((resolve, reject) => {
+      source.onload = () => resolve();
       source.onerror = reject;
       source.src = sourceUrl;
     });
     const canvas = document.createElement('canvas');
     canvas.width = image.width;
     canvas.height = image.height;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d')!;
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, image.width, image.height);
     context.drawImage(source, image.padding, image.padding);
-    return await new Promise((resolve, reject) => {
+    return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((result) => (result ? resolve(result) : reject(new Error('PNG encoding failed'))), 'image/png');
     });
   } finally {
@@ -26,11 +36,11 @@ async function addPadding(window, document, blob, image) {
   }
 }
 
-function setupImageExport(window, document, graph) {
-  const resolution = document.getElementById('export-resolution');
-  const dimensions = document.getElementById('export-dimensions');
-  const button = document.getElementById('export-png');
-  const status = document.getElementById('export-status');
+export function setupImageExport(window: Window & typeof globalThis, document: Document, graph: Core) {
+  const resolution = document.getElementById('export-resolution') as HTMLSelectElement;
+  const dimensions = document.getElementById('export-dimensions')!;
+  const button = document.getElementById('export-png') as HTMLButtonElement;
+  const status = document.getElementById('export-status')!;
   let busy = false;
   let active = true;
 
@@ -105,5 +115,3 @@ function setupImageExport(window, document, graph) {
     },
   };
 }
-
-module.exports = { setupImageExport };

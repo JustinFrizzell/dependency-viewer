@@ -1,12 +1,13 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const { parseDependency } = require('../src/data');
+import { test } from 'node:test';
+import * as assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import { deriveGraph, parseDependency, parseDocument } from '../src/data';
 
 test('demo revenue report connects to the documented daily revenue entity', () => {
   const graph = parseDependency(fs.readFileSync('test/fixtures/demo_data.json', 'utf8'));
   const name = 'workspace1.lakehouse.gold_mart.daily_revenue';
   const entity = graph.entities.find((item) => item.name === name);
+  assert.ok(entity);
   assert.equal(entity.documented, true);
   assert.deepEqual(entity.dependencies, ['workspace1.lakehouse.silver_intermediate.order_revenue']);
   assert.ok(graph.edges.some((edge) => edge.source === name && edge.target === 'workspace1.report.commerce_pulse'));
@@ -91,7 +92,6 @@ test('rejects duplicate JSON keys and numbers that cannot round-trip accurately'
 });
 
 test('Document round-trips metadata and repeated dependencies without inventing Entity records', () => {
-  const { parseDocument, deriveGraph } = require('../src/data');
   const raw =
     '{"__proto__":{"safe":true},"entities":[{"name":"A","dependencies":["missing","missing"],"metadata":{"constructor":[null,0.1,true]}}],"other":1.25}';
   const document = parseDocument(raw);

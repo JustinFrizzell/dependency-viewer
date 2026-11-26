@@ -1,28 +1,30 @@
-const { parseDocument, deriveGraph } = require('./data');
+import { parseDocument, deriveGraph } from './data';
+import type { DependencyDocument, Entity } from './document-types';
+import type { DocumentSession } from './document-session';
 
-function editDocument(session, edit) {
+function editDocument(session: DocumentSession, edit: (data: DependencyDocument) => void) {
   const data = parseDocument(session.current());
   edit(data);
   session.replace(JSON.stringify(data));
 }
 
-function validName(name, kind) {
+function validName(name: string, kind: string) {
   if (!name || name.trim() !== name)
     throw new Error(`${kind} name must be nonblank and have no surrounding whitespace.`);
 }
 
-function addEntity(session, name, description) {
+export function addEntity(session: DocumentSession, name: string, description: string) {
   validName(name, 'Entity');
   editDocument(session, (data) => {
     if (data.entities.some((entity) => entity.name === name))
       throw new Error('An Entity with this name already exists.');
-    const entity = { name, dependencies: [] };
+    const entity: Entity = { name, dependencies: [] };
     if (description) entity.description = description;
     data.entities.push(entity);
   });
 }
 
-function editEntity(session, name, newName, description) {
+export function editEntity(session: DocumentSession, name: string, newName: string, description: string | undefined) {
   validName(newName, 'Entity');
   editDocument(session, (data) => {
     if (newName !== name && deriveGraph(data).entities.some((entity) => entity.name === newName))
@@ -38,7 +40,7 @@ function editEntity(session, name, newName, description) {
   });
 }
 
-function removeEntity(session, name, removeReferences) {
+export function removeEntity(session: DocumentSession, name: string, removeReferences: boolean) {
   editDocument(session, (data) => {
     data.entities = data.entities.filter((entity) => entity.name !== name);
     if (removeReferences) {
@@ -48,9 +50,9 @@ function removeEntity(session, name, removeReferences) {
   });
 }
 
-function setProperty(session, name, key, value, isNew) {
+export function setProperty(session: DocumentSession, name: string, key: string, value: string, isNew: boolean) {
   editDocument(session, (data) => {
-    const entity = data.entities.find((item) => item.name === name);
+    const entity = data.entities.find((item) => item.name === name)!;
     if (['name', 'dependencies', 'description'].includes(key))
       throw new Error('Required Entity fields cannot be edited as properties.');
     if (isNew && Object.hasOwn(entity, key)) throw new Error('This property already exists; select it to change it.');
@@ -65,17 +67,17 @@ function setProperty(session, name, key, value, isNew) {
   });
 }
 
-function removeProperty(session, name, key) {
+export function removeProperty(session: DocumentSession, name: string, key: string) {
   editDocument(session, (data) => {
-    const entity = data.entities.find((item) => item.name === name);
+    const entity = data.entities.find((item) => item.name === name)!;
     delete entity[key];
   });
 }
 
-function editDependency(session, name, dependency, add) {
+export function editDependency(session: DocumentSession, name: string, dependency: string, add: boolean) {
   if (add) validName(dependency, 'Dependency');
   editDocument(session, (data) => {
-    const record = data.entities.find((entity) => entity.name === name);
+    const record = data.entities.find((entity) => entity.name === name)!;
     if (add) {
       if (record.dependencies.includes(dependency)) throw new Error('This Direct dependency already exists.');
       record.dependencies.push(dependency);
@@ -84,5 +86,3 @@ function editDependency(session, name, dependency, add) {
     }
   });
 }
-
-module.exports = { addEntity, editEntity, removeEntity, setProperty, removeProperty, editDependency };

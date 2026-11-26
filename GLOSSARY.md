@@ -4,6 +4,9 @@ The language used to describe entities and their dependencies.
 
 ## Language
 
+**Document**:
+A dependency graph, including its **Entities**, **Direct dependencies**, and document-specific settings.
+
 **Entity**:
 An identifiable thing represented in the dependency graph, such as a table, process, person, or place.
 

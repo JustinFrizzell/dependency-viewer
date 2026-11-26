@@ -1,6 +1,6 @@
 # Offline dependency viewer
 
-Use Node.js 18 or newer to build and check the viewer:
+Use Node.js 24 or newer to build and check the viewer:
 
 ```sh
 npm ci
@@ -71,7 +71,7 @@ The automated checks load representative JSON files, including 200 documented en
 
 ```sh
 npm run build:dependency
-node test/acceptance-fixtures.cjs
+node --import tsx test/acceptance-fixtures.ts
 ```
 
 On an isolated macOS test environment where networking can safely be disabled, open `dist/dependency-viewer.html` directly in current Safari via `file://`, and select `dist/dependency-acceptance.json`. Use Safari's Network inspector while opening and exercising the file to check for external requests. Do not disable shared network services or change another user's settings.

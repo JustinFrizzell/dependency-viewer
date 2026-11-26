@@ -1,14 +1,16 @@
-const path = require('path');
-const fs = require('fs');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
-const TerserPlugin = require('terser-webpack-plugin');
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import HtmlWebpackPlugin = require('html-webpack-plugin');
+import HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
+import TerserPlugin = require('terser-webpack-plugin');
+import type { Configuration } from 'webpack';
 
-module.exports = {
+const config: Configuration = {
   mode: 'production',
   devtool: false,
-  entry: path.resolve(__dirname, 'src/index.js'),
+  entry: path.resolve(__dirname, 'src/index.ts'),
   output: { path: path.resolve(__dirname, 'dist'), filename: 'dependency-viewer.js' },
+  resolve: { extensions: ['.ts', '.js'] },
   optimization: {
     minimizer: [
       new TerserPlugin({
@@ -29,5 +31,12 @@ module.exports = {
     }),
     new HtmlInlineScriptPlugin(),
   ],
-  module: { rules: [{ test: /\.css$/, use: ['style-loader', 'css-loader'] }] },
+  module: {
+    rules: [
+      { test: /\.ts$/, use: { loader: 'esbuild-loader', options: { target: 'es2020' } }, exclude: /node_modules/ },
+      { test: /\.css$/, use: ['style-loader', 'css-loader'] },
+    ],
+  },
 };
+
+export = config;
