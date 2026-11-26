@@ -148,6 +148,8 @@ document.getElementById('apply-document').addEventListener('click', () => {
 document.getElementById('discard-document').addEventListener('click', () => {
   session.discard();
   document.getElementById('add-entity-error').textContent = '';
+  const dependencyError = document.getElementById('dependency-error');
+  if (dependencyError) dependencyError.textContent = '';
   document.getElementById('document-error').textContent = '';
   updateDocumentControls();
 });
@@ -594,7 +596,7 @@ function showGraph(data, selectedName) {
       description.appendChild(extras);
     }
     details.appendChild(description);
-    function relationshipSection(title, names, emptyText) {
+    function relationshipSection(title, names, emptyText, remove) {
       const section = document.createElement('section');
       const heading = document.createElement('h3');
       heading.textContent = title;
@@ -613,18 +615,83 @@ function showGraph(data, selectedName) {
           button.textContent = relatedName + (entities.get(relatedName).documented ? '' : ' (undocumented)');
           button.addEventListener('click', () => selectEntity(relatedName));
           item.appendChild(button);
+          if (remove) {
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.textContent = 'Remove';
+            removeButton.setAttribute('aria-label', `Remove Direct dependency ${relatedName}`);
+            removeButton.addEventListener('click', () => remove(relatedName));
+            item.appendChild(removeButton);
+          }
           list.appendChild(item);
         }
         section.appendChild(list);
       }
       return section;
     }
+    const dependencyError = document.createElement('p');
+    dependencyError.id = 'dependency-error';
+    dependencyError.setAttribute('role', 'alert');
+    const removeDependency = entity.documented
+      ? (dependency) => {
+          try {
+            if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
+            const documentData = parseDocument(session.current());
+            const record = documentData.entities.find((item) => item.name === name);
+            record.dependencies = record.dependencies.filter((item) => item !== dependency);
+            session.replace(JSON.stringify(documentData));
+            refreshDocument(name);
+            document.getElementById('new-dependency-name').focus();
+          } catch (problem) {
+            dependencyError.textContent = `Error: ${problem.message}`;
+          }
+        }
+      : null;
+    const dependencies = relationshipSection(
+      'Direct dependencies',
+      entity.dependencies,
+      entity.documented ? 'No dependencies.' : 'Unknown',
+      removeDependency,
+    );
+    if (entity.documented) {
+      const form = document.createElement('form');
+      form.id = 'add-dependency-form';
+      form.noValidate = true;
+      const label = document.createElement('label');
+      label.htmlFor = 'new-dependency-name';
+      label.textContent = 'Direct dependency name';
+      const input = document.createElement('input');
+      input.id = 'new-dependency-name';
+      input.type = 'text';
+      input.autocomplete = 'off';
+      input.setAttribute('aria-describedby', 'dependency-error');
+      const submit = document.createElement('button');
+      submit.type = 'submit';
+      submit.textContent = 'Add dependency';
+      form.append(label, input, submit, dependencyError);
+      form.addEventListener('input', () => (dependencyError.textContent = ''));
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        try {
+          if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
+          const dependency = input.value;
+          if (!dependency || dependency.trim() !== dependency)
+            throw new Error('Dependency name must be nonblank and have no surrounding whitespace.');
+          const documentData = parseDocument(session.current());
+          const record = documentData.entities.find((item) => item.name === name);
+          if (record.dependencies.includes(dependency)) throw new Error('This Direct dependency already exists.');
+          record.dependencies.push(dependency);
+          session.replace(JSON.stringify(documentData));
+          refreshDocument(name);
+          document.getElementById('new-dependency-name').focus();
+        } catch (problem) {
+          dependencyError.textContent = `Error: ${problem.message}`;
+        }
+      });
+      dependencies.appendChild(form);
+    }
     details.append(
-      relationshipSection(
-        'Direct dependencies',
-        entity.dependencies,
-        entity.documented ? 'No dependencies.' : 'Unknown',
-      ),
+      dependencies,
       relationshipSection('Direct downstream entities', downstream.get(name), 'No downstream entities.'),
     );
     inspector.appendChild(details);

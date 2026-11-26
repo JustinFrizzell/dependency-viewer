@@ -1245,6 +1245,213 @@ test('download, undo and copy reflect saved state; replacement and leaving prote
   }
 });
 
+test('Entity and Direct dependency editors keep validation and history independent', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    const submit = (id) =>
+      document.getElementById(id).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    document.querySelector('#entity-results button[title="A"]').click();
+    document.getElementById('edit-entity-name').value = 'B';
+    submit('edit-entity-form');
+    assert.match(document.getElementById('edit-entity-error').textContent, /already exists/i);
+    submit('add-dependency-form');
+    assert.match(document.getElementById('dependency-error').textContent, /nonblank/i);
+    assert.match(document.getElementById('edit-entity-error').textContent, /already exists/i);
+    document.getElementById('edit-entity-name').value = 'Renamed';
+    submit('edit-entity-form');
+    document.getElementById('new-dependency-name').value = 'B';
+    submit('add-dependency-form');
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0], {
+      name: 'Renamed',
+      dependencies: ['B'],
+    });
+    document.getElementById('undo-document').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0], {
+      name: 'Renamed',
+      dependencies: [],
+    });
+    document.getElementById('undo-document').click();
+    assert.equal(JSON.parse(document.getElementById('document-json').value).entities[0].name, 'A');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('adding Direct dependencies updates the graph and preserves undocumented references', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const add = (name) => {
+      document.getElementById('new-dependency-name').value = name;
+      document
+        .getElementById('add-dependency-form')
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    };
+    add('B');
+    add('missing');
+    assert.match(document.getElementById('graph-summary').textContent, /B → A/);
+    assert.match(document.getElementById('graph-summary').textContent, /missing \(undocumented\)/);
+    assert.match(document.getElementById('selection-status').textContent, /missing \(undocumented\)/);
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), {
+      entities: [
+        { name: 'A', dependencies: ['B', 'missing'] },
+        { name: 'B', dependencies: [] },
+      ],
+    });
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('removing a Direct dependency removes its repeated entries but preserves other entries and metadata', () => {
+  const raw =
+    '{"entities":[{"name":"A","dependencies":["missing","B","missing","B"],"meta":{"x":1}},{"name":"B","dependencies":[]}],"other":true}';
+  const dom = open({ raw });
+  try {
+    const document = dom.window.document;
+    document.querySelector('#entity-results button[title="A"]').click();
+    document.querySelector('button[aria-label="Remove Direct dependency missing"]').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), {
+      entities: [
+        { name: 'A', dependencies: ['B', 'B'], meta: { x: 1 } },
+        { name: 'B', dependencies: [] },
+      ],
+      other: true,
+    });
+    assert.doesNotMatch(document.getElementById('graph-summary').textContent, /missing/);
+    assert.match(document.getElementById('graph-summary').textContent, /B → A/);
+    document.getElementById('undo-document').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), JSON.parse(raw));
+    document.getElementById('redo-document').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0].dependencies, ['B', 'B']);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('invalid, duplicate and cyclic Direct dependencies leave the Document unchanged', () => {
+  const raw =
+    '{"entities":[{"name":"A","dependencies":["B","B"]},{"name":"B","dependencies":[]},{"name":"C","dependencies":["A"]}]}';
+  const dom = open({ raw });
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const editor = document.getElementById('document-json');
+    const initial = editor.value;
+    const input = document.getElementById('new-dependency-name');
+    const form = document.getElementById('add-dependency-form');
+    const submit = (value) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    };
+    for (const invalid of ['', ' ', ' B', 'B ']) {
+      submit(invalid);
+      assert.match(document.getElementById('dependency-error').textContent, /nonblank.*whitespace/i);
+      assert.equal(editor.value, initial);
+    }
+    submit('B');
+    assert.match(document.getElementById('dependency-error').textContent, /already exists/i);
+    for (const cycle of ['A', 'C']) {
+      submit(cycle);
+      assert.match(document.getElementById('dependency-error').textContent, /cycle/i);
+      assert.equal(editor.value, initial);
+    }
+    submit('b');
+    assert.deepEqual(JSON.parse(editor.value).entities[0].dependencies, ['B', 'B', 'b']);
+    assert.match(document.getElementById('graph-summary').textContent, /b \(undocumented\)/);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('an unapplied JSON draft blocks adding and removing Direct dependencies', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":["B"]},{"name":"B","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const editor = document.getElementById('document-json');
+    editor.value = '{invalid';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('new-dependency-name').value = 'C';
+    document
+      .getElementById('add-dependency-form')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    assert.match(document.getElementById('dependency-error').textContent, /apply or discard.*draft/i);
+    document.querySelector('button[aria-label="Remove Direct dependency B"]').click();
+    assert.match(document.getElementById('dependency-error').textContent, /apply or discard.*draft/i);
+    assert.equal(editor.value, '{invalid');
+    assert.match(document.getElementById('graph-summary').textContent, /B → A/);
+    document.getElementById('discard-document').click();
+    assert.equal(document.getElementById('dependency-error').textContent, '');
+    document.querySelector('button[aria-label="Remove Direct dependency B"]').click();
+    assert.deepEqual(JSON.parse(editor.value).entities[0].dependencies, []);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('Direct dependency edits survive copy, download, undo, redo and reload', async () => {
+  const raw =
+    '{"entities":[{"name":"A","dependencies":["B","B"],"metadata":[1,true]},{"name":"B","dependencies":[]}],"extra":{"kept":true}}';
+  const dom = open(template(), [], true);
+  try {
+    const { document, Event, FileReader } = dom.window;
+    const fileInput = document.getElementById('dependency-file');
+    const load = (text) => {
+      Object.defineProperty(fileInput, 'files', {
+        configurable: true,
+        value: [new dom.window.File([text], 'dependencies.json', { type: 'application/json' })],
+      });
+      fileInput.dispatchEvent(new Event('change'));
+    };
+    load(raw);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 50));
+    document.querySelector('#entity-results button[title="A"]').click();
+    document.getElementById('new-dependency-name').value = 'missing';
+    document
+      .getElementById('add-dependency-form')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    const expected = JSON.parse(raw);
+    expected.entities[0].dependencies.push('missing');
+    let copied;
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+      value: { writeText: async (value) => (copied = value) },
+    });
+    document.getElementById('copy-document').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.deepEqual(JSON.parse(copied), expected);
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    let blob;
+    dom.window.URL.createObjectURL = (value) => ((blob = value), 'blob:document');
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = () => {};
+    document.getElementById('download-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    const saved = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(blob);
+    });
+    assert.deepEqual(JSON.parse(saved), expected);
+    document.getElementById('undo-document').click();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), JSON.parse(raw));
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    document.getElementById('redo-document').click();
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+    load(saved);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 50));
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), expected);
+    assert.match(document.getElementById('graph-summary').textContent, /missing \(undocumented\)/);
+    assert.equal(document.getElementById('undo-document').disabled, true);
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('adding an Entity to an empty Document immediately updates graph, details and JSON', () => {
   const dom = open({ raw: '{"entities":[],"extra":{"kept":true}}' });
   try {
