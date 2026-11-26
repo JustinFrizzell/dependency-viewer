@@ -433,6 +433,122 @@ function showGraph(data, selectedName) {
       badge.textContent = 'Undocumented entity';
       inspector.appendChild(badge);
     }
+    const form = document.createElement('form');
+    form.id = 'edit-entity-form';
+    form.noValidate = true;
+    const nameLabel = document.createElement('label');
+    nameLabel.htmlFor = 'edit-entity-name';
+    nameLabel.textContent = 'Entity name';
+    const nameInput = document.createElement('input');
+    nameInput.id = 'edit-entity-name';
+    nameInput.value = name;
+    nameInput.setAttribute('aria-describedby', 'edit-entity-error');
+    form.append(nameLabel, nameInput);
+    let descriptionInput;
+    if (entity.documented) {
+      const descriptionLabel = document.createElement('label');
+      descriptionLabel.htmlFor = 'edit-entity-description';
+      descriptionLabel.textContent = 'Description';
+      descriptionInput = document.createElement('textarea');
+      descriptionInput.id = 'edit-entity-description';
+      descriptionInput.value = entity.description || '';
+      descriptionInput.setAttribute('aria-describedby', 'edit-entity-error');
+      form.append(descriptionLabel, descriptionInput);
+    }
+    const save = document.createElement('button');
+    save.type = 'submit';
+    save.textContent = 'Apply Entity changes';
+    const error = document.createElement('p');
+    error.id = 'edit-entity-error';
+    error.setAttribute('role', 'alert');
+    form.append(save, error);
+    form.addEventListener('input', () => {
+      error.textContent = '';
+    });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      try {
+        const newName = nameInput.value;
+        if (!newName || newName.trim() !== newName)
+          throw new Error('Entity name must be nonblank and have no surrounding whitespace.');
+        if (newName !== name && entities.has(newName)) throw new Error('An Entity with this name already exists.');
+        const data = parseDocument(session.current());
+        const record = data.entities.find((item) => item.name === name);
+        if (record) {
+          record.name = newName;
+          if (descriptionInput.value !== (record.description || '')) record.description = descriptionInput.value;
+        }
+        for (const item of data.entities) {
+          item.dependencies = item.dependencies.map((dependency) => (dependency === name ? newName : dependency));
+        }
+        session.replace(JSON.stringify(data));
+        refreshDocument(newName);
+        document.getElementById('edit-entity-name').focus();
+      } catch (reason) {
+        error.textContent = `Error: ${reason.message}`;
+      }
+    });
+    inspector.appendChild(form);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.id = 'delete-entity';
+    deleteButton.textContent = 'Remove Entity';
+    const confirmation = document.createElement('fieldset');
+    confirmation.hidden = true;
+    const prompt = document.createElement('legend');
+    prompt.textContent =
+      entity.documented && downstream.get(name).length
+        ? 'Remove this Entity and retain or remove its references?'
+        : 'Remove this Entity and its references?';
+    confirmation.appendChild(prompt);
+    function choice(id, label, action) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = `delete-entity-${id}`;
+      button.textContent = label;
+      button.addEventListener('click', action);
+      confirmation.appendChild(button);
+    }
+    function removeEntity(removeReferences) {
+      try {
+        const data = parseDocument(session.current());
+        data.entities = data.entities.filter((item) => item.name !== name);
+        if (removeReferences) {
+          for (const item of data.entities)
+            item.dependencies = item.dependencies.filter((dependency) => dependency !== name);
+        }
+        session.replace(JSON.stringify(data));
+        refreshDocument();
+        const target = document.getElementById('entity-list').hidden
+          ? document.querySelector('#add-entity-panel summary')
+          : document.querySelector('#entity-list summary');
+        target.focus();
+      } catch (reason) {
+        error.textContent = `Error: ${reason.message}`;
+      }
+    }
+    if (entity.documented && downstream.get(name).length) {
+      choice('retain', 'Retain references as undocumented', () => removeEntity(false));
+    }
+    choice(
+      'remove',
+      entity.documented && downstream.get(name).length ? 'Remove references too' : 'Confirm removal',
+      () => removeEntity(true),
+    );
+    choice('cancel', 'Cancel', () => {
+      confirmation.hidden = true;
+      deleteButton.focus();
+    });
+    deleteButton.addEventListener('click', () => {
+      if (session.hasDraft()) {
+        error.textContent = 'Error: Apply or discard the JSON draft before editing the graph.';
+        return;
+      }
+      error.textContent = '';
+      confirmation.hidden = false;
+      confirmation.querySelector('button').focus();
+    });
+    inspector.append(deleteButton, confirmation);
     const details = document.createElement('div');
     details.className = 'inspector-details';
     const description = document.createElement('section');
