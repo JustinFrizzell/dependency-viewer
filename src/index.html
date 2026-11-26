@@ -89,6 +89,23 @@
         <p id="add-entity-error" role="alert"></p>
       </form>
     </details>
+    <details id="metadata-panel" class="document-panel" hidden>
+      <summary>Edit Entity properties</summary>
+      <form id="metadata-form" novalidate>
+        <label for="metadata-entity">Entity</label>
+        <select id="metadata-entity"></select>
+        <label for="metadata-property">Property</label>
+        <select id="metadata-property"></select>
+        <label for="metadata-key">Property name</label>
+        <input id="metadata-key" type="text" autocomplete="off" aria-describedby="metadata-error" />
+        <label for="metadata-value">JSON value</label>
+        <textarea id="metadata-value" rows="4" spellcheck="false" aria-describedby="metadata-error"></textarea>
+        <button type="submit">Apply property</button>
+        <button id="metadata-remove" type="button">Remove property</button>
+        <button id="metadata-discard" type="button">Discard property draft</button>
+        <p id="metadata-error" role="alert"></p>
+      </form>
+    </details>
     <main>
       <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
       <p id="status" role="status"></p>
