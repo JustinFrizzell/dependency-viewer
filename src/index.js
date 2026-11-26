@@ -756,6 +756,7 @@ function showGraph(data, selectedName) {
     const removeDependency = entity.documented
       ? (dependency) => {
           try {
+            requireNoMetadataDraft();
             if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
             const documentData = parseDocument(session.current());
             const record = documentData.entities.find((item) => item.name === name);
@@ -794,6 +795,7 @@ function showGraph(data, selectedName) {
       form.addEventListener('submit', (event) => {
         event.preventDefault();
         try {
+          requireNoMetadataDraft();
           if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
           const dependency = input.value;
           if (!dependency || dependency.trim() !== dependency)

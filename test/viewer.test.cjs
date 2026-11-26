@@ -2056,6 +2056,26 @@ test('property drafts block Entity edits and settings changes', () => {
   }
 });
 
+test('property drafts block Direct dependency edits without losing the draft', () => {
+  const dom = open(dataset({ entities: [{ name: 'A', dependencies: ['missing'] }] }));
+  try {
+    const { document, Event } = dom.window;
+    document.querySelector('#entity-results button[title="A"]').click();
+    const value = document.getElementById('metadata-value');
+    value.value = '{';
+    value.dispatchEvent(new Event('input'));
+    document.getElementById('new-dependency-name').value = 'other';
+    document.getElementById('add-dependency-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    assert.match(document.getElementById('dependency-error').textContent, /property draft/i);
+    document.querySelector('[aria-label="Remove Direct dependency missing"]').click();
+    assert.match(document.getElementById('dependency-error').textContent, /property draft/i);
+    assert.equal(value.value, '{');
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value).entities[0].dependencies, ['missing']);
+  } finally {
+    dom.window.close();
+  }
+});
+
 test('typing in the middle of a JSON draft keeps the caret in place', () => {
   const dom = open({ raw: '{"entities":[]}' });
   try {
