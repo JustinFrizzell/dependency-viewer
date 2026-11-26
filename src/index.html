@@ -17,6 +17,9 @@
     <section id="file-panel" class="file-panel" aria-label="Dependency file">
       <label for="dependency-file">Choose dependency JSON</label>
       <input id="dependency-file" type="file" accept=".json,application/json" />
+      <label for="paste-json">Or paste dependency JSON</label>
+      <textarea id="paste-json" rows="6" spellcheck="false"></textarea>
+      <button id="open-paste" type="button">Open pasted JSON</button>
       <span id="file-name"></span>
       <p id="file-error" role="alert"></p>
       <details>
@@ -62,6 +65,14 @@
         <span id="copy-status" role="status"></span>
       </details>
     </section>
+    <details id="document-panel" class="document-panel" hidden>
+      <summary>Opened Document</summary>
+      <label for="document-json">Opened Document JSON</label>
+      <textarea id="document-json" rows="8" readonly spellcheck="false"></textarea>
+      <button id="copy-document" type="button">Copy Document</button>
+      <button id="download-document" type="button">Download Document</button>
+      <span id="document-status" role="status"></span>
+    </details>
     <main>
       <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
       <p id="status" role="status"></p>

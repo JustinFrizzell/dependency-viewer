@@ -1060,3 +1060,80 @@ test('generated acceptance files support representative search and dependency na
     empty.window.close();
   }
 });
+
+test('pasting a Document exposes its unchanged JSON and invalid input preserves it', async () => {
+  const dom = open(template());
+  try {
+    const document = dom.window.document;
+    const raw =
+      '{"entities":[{"name":"A","dependencies":["missing","missing"],"__proto__":{"safe":true}}],"meta":[null,0.1]}';
+    const input = document.getElementById('paste-json');
+    input.value = raw;
+    document.getElementById('open-paste').click();
+    const output = document.getElementById('document-json');
+    assert.deepEqual(JSON.parse(output.value), JSON.parse(raw));
+    assert.match(document.getElementById('graph-summary').textContent, /missing/);
+    let copied;
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+      value: {
+        writeText: async (text) => {
+          copied = text;
+        },
+      },
+    });
+    document.getElementById('copy-document').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.deepEqual(JSON.parse(copied), JSON.parse(raw));
+    input.value = '{"entities":[],"x":1,"x":2}';
+    document.getElementById('open-paste').click();
+    assert.match(document.getElementById('file-error').textContent, /duplicate/i);
+    assert.deepEqual(JSON.parse(output.value), JSON.parse(raw));
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('paste supersedes pending file reads and download reloads the same empty Document', async () => {
+  const dom = open(template(), [], true);
+  try {
+    const { document, FileReader } = dom.window;
+    const readers = [];
+    dom.window.FileReader = class {
+      readAsText() {
+        readers.push(this);
+      }
+    };
+    loadFile(dom, '', 'old.json');
+    const raw = '{"entities":[],"metadata":{"nested":[false,"yes",1e2]}}';
+    document.getElementById('paste-json').value = raw;
+    document.getElementById('open-paste').click();
+    readers[0].result = '{"entities":[{"name":"stale","dependencies":[]}]}';
+    readers[0].onload();
+    assert.match(document.getElementById('status').textContent, /no entities/i);
+    let blob;
+    let filename;
+    dom.window.URL.createObjectURL = (value) => {
+      blob = value;
+      return 'blob:document';
+    };
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = function () {
+      filename = this.download;
+    };
+    document.getElementById('download-document').click();
+    assert.equal(filename, 'pasted-document.json');
+    const saved = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(blob);
+    });
+    assert.deepEqual(JSON.parse(saved), JSON.parse(raw));
+    loadFile(dom, '', filename);
+    readers[1].result = saved;
+    readers[1].onload();
+    assert.deepEqual(JSON.parse(document.getElementById('document-json').value), JSON.parse(raw));
+  } finally {
+    dom.window.close();
+  }
+});

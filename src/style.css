@@ -70,6 +70,28 @@ header span {
   padding: 8px;
   font: inherit;
 }
+#paste-json,
+#document-json {
+  display: block;
+  width: min(100%, 800px);
+  max-height: 20vh;
+  padding: 8px;
+  font: inherit;
+}
+.document-panel {
+  flex: none;
+  padding: 8px 24px;
+  background: white;
+  border-bottom: 1px solid #dfe8eb;
+}
+.document-panel summary {
+  cursor: pointer;
+  color: #087c72;
+}
+.document-panel label {
+  display: block;
+  font-weight: 600;
+}
 #file-error:not(:empty) {
   width: 100%;
   color: #a32020;

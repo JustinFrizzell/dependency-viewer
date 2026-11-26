@@ -1,7 +1,7 @@
 require('./style.css');
 const cytoscape = require('cytoscape');
 const dagre = require('cytoscape-dagre');
-const { parseDependency } = require('./data');
+const { parseDocument, deriveGraph } = require('./data');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings } = require('./colour-settings');
@@ -17,6 +17,70 @@ document.getElementById('status').textContent = 'Choose a JSON file to view depe
 let cleanupGraph = () => {};
 let resizeGraph = () => {};
 let selection = 0;
+let currentDocument = null;
+let documentName = 'dependency-document.json';
+
+function openDocument(raw, name) {
+  let nextDocument;
+  let graph;
+  let serialized;
+  try {
+    nextDocument = parseDocument(raw);
+    graph = deriveGraph(nextDocument);
+    serialized = JSON.stringify(nextDocument, null, 2);
+  } catch (error) {
+    fileError.textContent = `Error: unusable dependency data. ${error.message}`;
+    return;
+  }
+  currentDocument = nextDocument;
+  documentName = name;
+  document.getElementById('document-json').value = serialized;
+  document.getElementById('document-panel').hidden = false;
+  document.getElementById('document-status').textContent = '';
+  cleanupGraph();
+  document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
+  document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
+  filePanel.hidden = graph.entities.length > 0;
+  document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
+  fileError.textContent = '';
+  document.getElementById('file-name').textContent = name;
+  if (graph.entities.length) cleanupGraph = showGraph(graph);
+  else {
+    cleanupGraph = () => {};
+    resizeGraph = () => {};
+    document.getElementById('status').textContent = 'No entities in this dependency dataset.';
+  }
+}
+
+document.getElementById('open-paste').addEventListener('click', () => {
+  selection++;
+  openDocument(document.getElementById('paste-json').value, 'pasted-document.json');
+});
+
+document.getElementById('copy-document').addEventListener('click', async () => {
+  const output = document.getElementById('document-json');
+  const status = document.getElementById('document-status');
+  try {
+    if (!navigator.clipboard) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(output.value);
+    status.textContent = 'Document copied.';
+  } catch {
+    output.focus();
+    output.select();
+    status.textContent = 'Select and copy the Document JSON above.';
+  }
+});
+
+document.getElementById('download-document').addEventListener('click', () => {
+  if (!currentDocument) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(currentDocument, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = documentName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  document.getElementById('document-status').textContent = 'Document download started.';
+});
 
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
@@ -26,30 +90,16 @@ fileInput.addEventListener('change', () => {
   const reader = new FileReader();
   reader.onload = () => {
     if (current !== selection) return;
-    let data;
-    try {
-      data = parseDependency(reader.result);
-    } catch (error) {
-      fileError.textContent = `Error: unusable dependency data. ${error.message}`;
-      return;
-    }
-    cleanupGraph();
-    document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
-    document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
-    filePanel.hidden = data.entities.length > 0;
-    document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
-    fileError.textContent = '';
-    document.getElementById('file-name').textContent = file.name;
-    if (data.entities.length) cleanupGraph = showGraph(data);
-    else {
-      cleanupGraph = () => {};
-      document.getElementById('status').textContent = 'No entities in this dependency dataset.';
-    }
+    openDocument(reader.result, file.name);
   };
   reader.onerror = () => {
     if (current === selection) fileError.textContent = 'Error: could not read the selected file.';
   };
-  reader.readAsText(file);
+  try {
+    reader.readAsText(file);
+  } catch {
+    if (current === selection) fileError.textContent = 'Error: could not read the selected file. Choose it again.';
+  }
 });
 
 document.addEventListener('click', (event) => {

@@ -6,9 +6,12 @@ Use Node.js 18 or newer to build and check the viewer:
 npm ci
 npm run build:dependency
 npm run test:dependency
+npm run typecheck
 ```
 
-The build writes `dist/dependency-viewer.html`, with scripts and styles embedded. Open it directly with `file://`, without a server or network, then choose a JSON file. The file is read locally in the browser and is not retained after a refresh. Selecting a valid file replaces the graph and resets all view settings, including when selecting the same file again. The file toolbar stays open when there are no entities and collapses when a graph is loaded. Use **File** beside **Downstream** to reopen the toolbar. An invalid or unreadable file shows an error without changing the existing graph. Expand **JSON format and example** for format guidance and a copyable example.
+The build writes `dist/dependency-viewer.html`, with scripts and styles embedded. Open it directly with `file://`, without a server or network, then choose a JSON file or paste JSON and select **Open pasted JSON**. The Document is read locally in the browser and is not retained after a refresh. Opening a valid Document replaces the graph and resets all view settings, including when selecting the same file again. The file toolbar stays open when there are no entities and collapses when a graph is loaded. Use **File** beside **Downstream** to reopen the toolbar. Invalid or unreadable input shows an error without changing the open Document. Expand **JSON format and example** for format guidance and a copyable example.
+
+Expand **Opened Document** to view, copy, or download the original Document as JSON. Unknown properties and repeated dependency entries are retained; undocumented graph nodes are not added as Entity records. Whitespace may change. The viewer rejects duplicate object keys and numbers that cannot round-trip accurately; store such numbers as strings if needed. If clipboard access is unavailable, select and copy the displayed JSON manually.
 
 The left-to-right Dagre layout uses rounded orthogonal relationships with marching-ant dashes. Drag the canvas to pan; use the wheel or zoom buttons to zoom and **Reset to fit** to fit the current view. Use **Pause** to stop the animation; reduced-motion preferences disable it automatically and it also stops while the page is hidden. Select a node to inspect its description and direct relationships, then select a related entity to navigate to its details. Use the collapsible **Entities** list to search full names case-insensitively; selecting a result opens its details and centers it on the canvas. Dashed amber nodes are undocumented dependencies and are also searchable.
 

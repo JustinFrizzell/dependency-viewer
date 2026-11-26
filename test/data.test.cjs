@@ -79,3 +79,31 @@ test('additional properties retain entry order and do not overwrite normalized f
   ]);
   assert.deepEqual(graph.entities[1], { name: 'missing', dependencies: [], documented: false });
 });
+
+test('rejects duplicate JSON keys and numbers that cannot round-trip accurately', () => {
+  for (const raw of [
+    '{"entities":[],"metadata":{"key":1,"\\u006bey":2}}',
+    '{"entities":[],"number":9007199254740993}',
+    '{"entities":[],"number":1e-400}',
+  ]) {
+    assert.throws(() => parseDependency(raw), /duplicate|number|precision/i);
+  }
+});
+
+test('Document round-trips metadata and repeated dependencies without inventing Entity records', () => {
+  const { parseDocument, deriveGraph } = require('../src/data');
+  const raw =
+    '{"__proto__":{"safe":true},"entities":[{"name":"A","dependencies":["missing","missing"],"metadata":{"constructor":[null,0.1,true]}}],"other":1.25}';
+  const document = parseDocument(raw);
+  assert.deepEqual(JSON.parse(JSON.stringify(document)), JSON.parse(raw));
+  const graph = deriveGraph(document);
+  assert.equal(graph.entities.length, 2);
+  assert.deepEqual(graph.edges, [{ source: 'missing', target: 'A' }]);
+  assert.equal(document.entities.length, 1);
+  assert.deepEqual(document.entities[0].dependencies, ['missing', 'missing']);
+});
+
+test('excessively nested metadata is rejected with an actionable error', () => {
+  const raw = '{"entities":[],"metadata":' + '['.repeat(12000) + 'null' + ']'.repeat(12000) + '}';
+  assert.throws(() => parseDependency(raw), /nesting.*deep/i);
+});
