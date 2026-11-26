@@ -1137,3 +1137,122 @@ test('paste supersedes pending file reads and download reloads the same empty Do
     dom.window.close();
   }
 });
+
+test('applying a JSON draft updates the graph and can be undone and redone', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const document = dom.window.document;
+    const editor = document.getElementById('document-json');
+    editor.value = '{"entities":[{"name":"B","dependencies":["missing"],"description":"Changed"}],"extra":true}';
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    document.getElementById('apply-document').click();
+    assert.match(document.getElementById('graph-summary').textContent, /missing → B/);
+    document.querySelector('#entity-results button[title="B"]').click();
+    assert.match(document.getElementById('selection-status').textContent, /Changed/);
+    document.getElementById('undo-document').click();
+    assert.match(document.getElementById('graph-summary').textContent, /A/);
+    document.getElementById('redo-document').click();
+    assert.match(document.getElementById('graph-summary').textContent, /missing → B/);
+    assert.equal(JSON.parse(editor.value).extra, true);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('invalid drafts cannot replace or be saved, and discarding restores the Document', () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const document = dom.window.document;
+    const editor = document.getElementById('document-json');
+    editor.value = '{"entities":[],"n":9007199254740993}';
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    document.getElementById('apply-document').click();
+    assert.match(document.getElementById('document-error').textContent, /accurately/i);
+    assert.match(document.getElementById('graph-summary').textContent, /A/);
+    assert.equal(document.getElementById('download-document').disabled, true);
+    assert.equal(document.getElementById('copy-document').disabled, true);
+    assert.match(document.getElementById('unsaved-indicator').textContent, /unsaved/i);
+    document.getElementById('discard-document').click();
+    assert.equal(JSON.parse(editor.value).entities[0].name, 'A');
+    assert.equal(document.getElementById('download-document').disabled, false);
+    assert.equal(document.getElementById('unsaved-indicator').textContent, '');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('download, undo and copy reflect saved state; replacement and leaving protect drafts', async () => {
+  const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
+  try {
+    const { document, Event } = dom.window;
+    const editor = document.getElementById('document-json');
+    const setDraft = (value) => {
+      editor.value = value;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const dirty = () => document.getElementById('unsaved-indicator').textContent;
+    let copied;
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+      value: {
+        writeText: async (value) => {
+          copied = value;
+        },
+      },
+    });
+    dom.window.URL.createObjectURL = () => 'blob:document';
+    dom.window.URL.revokeObjectURL = () => {};
+    dom.window.HTMLAnchorElement.prototype.click = () => {};
+    setDraft('{"entities":[{"name":"B","dependencies":[]}]}');
+    document.getElementById('apply-document').click();
+    document.getElementById('copy-document').click();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.equal(JSON.parse(copied).entities[0].name, 'B');
+    assert.match(dirty(), /unsaved/i);
+    document.getElementById('download-document').click();
+    assert.equal(dirty(), '');
+    setDraft('{"entities":[{"name":"C","dependencies":[]}]}');
+    document.getElementById('apply-document').click();
+    assert.match(dirty(), /unsaved/i);
+    document.getElementById('undo-document').click();
+    assert.equal(dirty(), '');
+    setDraft('{invalid');
+    const leave = new Event('beforeunload', { cancelable: true });
+    dom.window.dispatchEvent(leave);
+    assert.equal(leave.defaultPrevented, true);
+    let confirmations = 0;
+    dom.window.confirm = () => {
+      confirmations++;
+      return false;
+    };
+    loadFile(dom, '{"entities":[{"name":"D","dependencies":[]}]}', 'replacement.json');
+    assert.equal(confirmations, 1);
+    assert.equal(editor.value, '{invalid');
+    assert.match(document.getElementById('graph-summary').textContent, /B/);
+    document.getElementById('paste-json').value = '{bad';
+    document.getElementById('open-paste').click();
+    assert.equal(confirmations, 1);
+    assert.equal(editor.value, '{invalid');
+    dom.window.confirm = () => true;
+    loadFile(dom, '{"entities":[]}', 'replacement.json');
+    assert.equal(document.getElementById('undo-document').disabled, true);
+    assert.equal(dirty(), '');
+    const cleanLeave = new Event('beforeunload', { cancelable: true });
+    dom.window.dispatchEvent(cleanLeave);
+    assert.equal(cleanLeave.defaultPrevented, false);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('typing in the middle of a JSON draft keeps the caret in place', () => {
+  const dom = open({ raw: '{"entities":[]}' });
+  try {
+    const editor = dom.window.document.getElementById('document-json');
+    editor.value = '{"entities":[]}';
+    editor.setSelectionRange(2, 2);
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(editor.selectionStart, 2);
+  } finally {
+    dom.window.close();
+  }
+});

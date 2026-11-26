@@ -66,9 +66,14 @@
       </details>
     </section>
     <details id="document-panel" class="document-panel" hidden>
-      <summary>Opened Document</summary>
-      <label for="document-json">Opened Document JSON</label>
-      <textarea id="document-json" rows="8" readonly spellcheck="false"></textarea>
+      <summary>Opened Document <span id="unsaved-indicator"></span></summary>
+      <label for="document-json">Document JSON draft</label>
+      <textarea id="document-json" rows="8" spellcheck="false"></textarea>
+      <button id="apply-document" type="button">Apply JSON draft</button>
+      <button id="discard-document" type="button">Discard JSON draft</button>
+      <button id="undo-document" type="button">Undo</button>
+      <button id="redo-document" type="button">Redo</button>
+      <p id="document-error" role="alert"></p>
       <button id="copy-document" type="button">Copy Document</button>
       <button id="download-document" type="button">Download Document</button>
       <span id="document-status" role="status"></span>

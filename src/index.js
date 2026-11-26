@@ -2,6 +2,7 @@ require('./style.css');
 const cytoscape = require('cytoscape');
 const dagre = require('cytoscape-dagre');
 const { parseDocument, deriveGraph } = require('./data');
+const { createDocumentSession } = require('./document-session');
 const { setupEdgeMotion } = require('./edge-motion');
 const { dependencyEdgeStyle } = require('./edge-style');
 const { setupColourSettings } = require('./colour-settings');
@@ -17,33 +18,38 @@ document.getElementById('status').textContent = 'Choose a JSON file to view depe
 let cleanupGraph = () => {};
 let resizeGraph = () => {};
 let selection = 0;
-let currentDocument = null;
+let session = null;
 let documentName = 'dependency-document.json';
 
 function openDocument(raw, name) {
   let nextDocument;
   let graph;
-  let serialized;
   try {
     nextDocument = parseDocument(raw);
     graph = deriveGraph(nextDocument);
-    serialized = JSON.stringify(nextDocument, null, 2);
   } catch (error) {
     fileError.textContent = `Error: unusable dependency data. ${error.message}`;
     return;
   }
-  currentDocument = nextDocument;
+  if (session && session.isUnsaved() && !window.confirm('Replace the Document and lose unsaved changes and drafts?'))
+    return;
+  session = createDocumentSession(nextDocument);
   documentName = name;
-  document.getElementById('document-json').value = serialized;
+  updateDocumentControls();
   document.getElementById('document-panel').hidden = false;
   document.getElementById('document-status').textContent = '';
+  document.getElementById('document-error').textContent = '';
+  renderGraph(graph);
+  fileError.textContent = '';
+  document.getElementById('file-name').textContent = name;
+}
+
+function renderGraph(graph) {
   cleanupGraph();
   document.querySelector('main').replaceWith(mainTemplate.cloneNode(true));
   document.querySelector('footer').replaceWith(footerTemplate.cloneNode(true));
   filePanel.hidden = graph.entities.length > 0;
   document.getElementById('toggle-file-panel').setAttribute('aria-expanded', String(!filePanel.hidden));
-  fileError.textContent = '';
-  document.getElementById('file-name').textContent = name;
   if (graph.entities.length) cleanupGraph = showGraph(graph);
   else {
     cleanupGraph = () => {};
@@ -51,6 +57,57 @@ function openDocument(raw, name) {
     document.getElementById('status').textContent = 'No entities in this dependency dataset.';
   }
 }
+
+function updateDocumentControls() {
+  if (!session) return;
+  const editor = document.getElementById('document-json');
+  if (editor.value !== session.draft()) editor.value = session.draft();
+  document.getElementById('unsaved-indicator').textContent = session.isUnsaved() ? '— Unsaved changes' : '';
+  document.getElementById('apply-document').disabled = !session.hasDraft();
+  document.getElementById('discard-document').disabled = !session.hasDraft();
+  document.getElementById('undo-document').disabled = !session.canUndo();
+  document.getElementById('redo-document').disabled = !session.canRedo();
+  document.getElementById('download-document').disabled = session.hasDraft();
+  document.getElementById('copy-document').disabled = session.hasDraft();
+}
+
+function refreshDocument() {
+  updateDocumentControls();
+  document.getElementById('document-error').textContent = '';
+  document.getElementById('document-status').textContent = '';
+  renderGraph(deriveGraph(parseDocument(session.current())));
+}
+
+document.getElementById('document-json').addEventListener('input', (event) => {
+  session.setDraft(event.target.value);
+  document.getElementById('document-error').textContent = '';
+  document.getElementById('document-status').textContent = '';
+  updateDocumentControls();
+});
+document.getElementById('apply-document').addEventListener('click', () => {
+  try {
+    session.apply();
+    refreshDocument();
+  } catch (error) {
+    document.getElementById('document-error').textContent = `Error: ${error.message}`;
+  }
+});
+document.getElementById('discard-document').addEventListener('click', () => {
+  session.discard();
+  document.getElementById('document-error').textContent = '';
+  updateDocumentControls();
+});
+for (const action of ['undo', 'redo']) {
+  document.getElementById(`${action}-document`).addEventListener('click', () => {
+    session[action]();
+    refreshDocument();
+  });
+}
+window.addEventListener('beforeunload', (event) => {
+  if (!session || !session.isUnsaved()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 document.getElementById('open-paste').addEventListener('click', () => {
   selection++;
@@ -72,13 +129,15 @@ document.getElementById('copy-document').addEventListener('click', async () => {
 });
 
 document.getElementById('download-document').addEventListener('click', () => {
-  if (!currentDocument) return;
-  const url = URL.createObjectURL(new Blob([JSON.stringify(currentDocument, null, 2)], { type: 'application/json' }));
+  if (!session || session.hasDraft()) return;
+  const url = URL.createObjectURL(new Blob([session.current()], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = documentName;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  session.markSaved();
+  updateDocumentControls();
   document.getElementById('document-status').textContent = 'Document download started.';
 });
 

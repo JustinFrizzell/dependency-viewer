@@ -92,7 +92,8 @@ header span {
   display: block;
   font-weight: 600;
 }
-#file-error:not(:empty) {
+#file-error:not(:empty),
+#document-error:not(:empty) {
   width: 100%;
   color: #a32020;
   margin: 6px 0 0;
