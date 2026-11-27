@@ -9,18 +9,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dependency viewer</title>
   </head>
-  <body>
+  <body data-mode="view">
     <header>
       <h1>Dependency viewer</h1>
-      <span>Entity dependency</span>
+      <span id="document-name">No Document</span><span id="unsaved-indicator"></span>
+      <button id="toggle-file-panel" type="button" aria-controls="file-panel" aria-expanded="true">File</button>
+      <label for="theme-preference">Theme</label>
+      <select id="theme-preference">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+      <div role="group" aria-label="Document mode">
+        <button id="mode-view" type="button" aria-pressed="true">View</button>
+        <button id="mode-edit" type="button" aria-pressed="false" disabled>Edit</button>
+      </div>
+      <button class="edit-only" id="undo-document" type="button" disabled>Undo</button>
+      <button class="edit-only" id="redo-document" type="button" disabled>Redo</button>
+      <details id="document-panel" class="document-panel" hidden>
+        <summary>Document JSON</summary>
+        <div class="floating-content">
+          <label for="document-json">Document JSON draft</label>
+          <textarea id="document-json" rows="8" spellcheck="false"></textarea>
+          <button class="edit-only" id="apply-document" type="button">Apply JSON draft</button>
+          <button class="edit-only" id="discard-document" type="button">Discard JSON draft</button>
+          <button id="settings-entry" type="button" aria-controls="colour-settings">Settings</button>
+          <p id="document-error" role="alert"></p>
+          <button id="copy-document" type="button">Copy Document</button>
+          <button id="download-document" type="button">Download Document</button>
+          <span id="document-status" role="status"></span>
+        </div>
+      </details>
+      <details id="add-entity-panel" class="document-panel edit-only" hidden>
+        <summary>Add Entity</summary>
+        <div class="floating-content">
+          <form id="add-entity-form" novalidate>
+            <label for="new-entity-name">Entity name</label>
+            <input id="new-entity-name" type="text" autocomplete="off" aria-describedby="add-entity-error" />
+            <label for="new-entity-description">Description (optional)</label>
+            <textarea id="new-entity-description" rows="3"></textarea>
+            <button type="submit">Add Entity</button>
+            <button id="discard-new-entity-draft" type="button">Discard new Entity draft</button>
+            <p id="add-entity-error" role="alert"></p>
+          </form>
+        </div>
+      </details>
+      <details id="metadata-panel" class="document-panel edit-only" hidden>
+        <summary>Edit Entity properties</summary>
+        <div class="floating-content">
+          <form id="metadata-form" novalidate>
+            <label for="metadata-entity">Entity</label>
+            <select id="metadata-entity"></select>
+            <label for="metadata-property">Property</label>
+            <select id="metadata-property"></select>
+            <label for="metadata-key">Property name</label>
+            <input id="metadata-key" type="text" autocomplete="off" aria-describedby="metadata-error" />
+            <label for="metadata-value">JSON value</label>
+            <textarea id="metadata-value" rows="4" spellcheck="false" aria-describedby="metadata-error"></textarea>
+            <button type="submit">Apply property</button>
+            <button id="metadata-remove" type="button">Remove property</button>
+            <button id="metadata-discard" type="button">Discard property draft</button>
+            <p id="metadata-error" role="alert"></p>
+          </form>
+        </div>
+      </details>
     </header>
+    <section id="draft-resolution" class="document-panel" aria-label="Resolve drafts before leaving Edit" hidden>
+      <p id="draft-resolution-description">
+        Apply or discard each draft before leaving Edit. If drafts conflict, discard one before applying another.
+      </p>
+      <div id="draft-resolution-actions"></div>
+      <p id="draft-resolution-error" role="alert"></p>
+      <button id="draft-stay" type="button">Stay in Edit</button>
+    </section>
     <section id="file-panel" class="file-panel" aria-label="Dependency file">
+      <h2 id="open-prompt">Open a Document</h2>
       <label for="dependency-file">Choose dependency JSON</label>
       <input id="dependency-file" type="file" accept=".json,application/json" />
       <label for="paste-json">Or paste dependency JSON</label>
       <textarea id="paste-json" rows="6" spellcheck="false"></textarea>
       <button id="open-paste" type="button">Open pasted JSON</button>
       <span id="file-name"></span>
+      <div id="file-document-actions" hidden>
+        <button id="file-view-document" type="button">View Document JSON</button>
+        <button id="file-copy-document" type="button">Copy Document</button>
+        <button id="file-download-document" type="button">Download Document</button>
+      </div>
       <p id="file-error" role="alert"></p>
       <details>
         <summary>JSON format and example</summary>
@@ -65,110 +139,87 @@
         <span id="copy-status" role="status"></span>
       </details>
     </section>
-    <details id="document-panel" class="document-panel" hidden>
-      <summary>Opened Document <span id="unsaved-indicator"></span></summary>
-      <label for="document-json">Document JSON draft</label>
-      <textarea id="document-json" rows="8" spellcheck="false"></textarea>
-      <button id="apply-document" type="button">Apply JSON draft</button>
-      <button id="discard-document" type="button">Discard JSON draft</button>
-      <button id="undo-document" type="button">Undo</button>
-      <button id="redo-document" type="button">Redo</button>
-      <button id="settings-entry" type="button" aria-controls="colour-settings">Settings</button>
-      <p id="document-error" role="alert"></p>
-      <button id="copy-document" type="button">Copy Document</button>
-      <button id="download-document" type="button">Download Document</button>
-      <span id="document-status" role="status"></span>
-    </details>
-    <details id="add-entity-panel" class="document-panel" hidden>
-      <summary>Add Entity</summary>
-      <form id="add-entity-form" novalidate>
-        <label for="new-entity-name">Entity name</label>
-        <input id="new-entity-name" type="text" autocomplete="off" aria-describedby="add-entity-error" />
-        <label for="new-entity-description">Description (optional)</label>
-        <textarea id="new-entity-description" rows="3"></textarea>
-        <button type="submit">Add Entity</button>
-        <button id="discard-new-entity-draft" type="button">Discard new Entity draft</button>
-        <p id="add-entity-error" role="alert"></p>
-      </form>
-    </details>
-    <details id="metadata-panel" class="document-panel" hidden>
-      <summary>Edit Entity properties</summary>
-      <form id="metadata-form" novalidate>
-        <label for="metadata-entity">Entity</label>
-        <select id="metadata-entity"></select>
-        <label for="metadata-property">Property</label>
-        <select id="metadata-property"></select>
-        <label for="metadata-key">Property name</label>
-        <input id="metadata-key" type="text" autocomplete="off" aria-describedby="metadata-error" />
-        <label for="metadata-value">JSON value</label>
-        <textarea id="metadata-value" rows="4" spellcheck="false" aria-describedby="metadata-error"></textarea>
-        <button type="submit">Apply property</button>
-        <button id="metadata-remove" type="button">Remove property</button>
-        <button id="metadata-discard" type="button">Discard property draft</button>
-        <p id="metadata-error" role="alert"></p>
-      </form>
-    </details>
     <main>
-      <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
+      <div
+        id="graph"
+        role="region"
+        tabindex="0"
+        aria-label="Directed Entity dependency graph"
+        aria-describedby="graph-instructions graph-summary"
+      ></div>
+      <div id="graph-entities" aria-label="Graph Entities"></div>
       <p id="status" role="status"></p>
+      <p id="graph-count" role="status"></p>
       <p id="graph-filter-status" role="status"></p>
+      <p id="inspection-announcement" class="visually-hidden" role="status"></p>
+      <p id="connection-status" role="status"></p>
+      <div id="relationship-actions" class="edit-only" hidden>
+        <button id="remove-relationship" type="button"></button>
+      </div>
+      <p id="graph-instructions" class="visually-hidden">
+        Use arrow keys to pan and plus or minus to zoom. Relationship arrows point from a dependency to its dependent.
+      </p>
       <div id="graph-summary" class="visually-hidden"></div>
-      <details id="entity-list" open hidden>
-        <summary>Entities</summary>
-        <div class="entity-list-content">
-          <label for="entity-search">Search entities</label>
-          <input id="entity-search" type="search" autocomplete="off" placeholder="Search full entity names" />
-          <p id="entity-search-status" role="status"></p>
-          <ul id="entity-results"></ul>
-        </div>
-      </details>
-      <details id="colour-settings" open hidden>
-        <summary>Settings</summary>
-        <div class="colour-settings-content">
-          <div class="colour-settings-actions">
-            <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
-            <button id="reset-colours" type="button">Reset</button>
-          </div>
-          <p>Colour entities when their full name contains this text. The first match wins.</p>
-          <p id="colour-error" role="alert"></p>
-          <div id="colour-rules"></div>
-          <section class="presentation-settings" aria-labelledby="presentation-heading">
-            <h3 id="presentation-heading">Graph presentation</h3>
-            <label><input id="compact-nodes" type="checkbox" /> Compact nodes</label>
-            <label><input id="tooltips-enabled" type="checkbox" checked /> Show hover tooltips</label>
-            <button id="reset-presentation" type="button">Reset presentation</button>
-            <p id="presentation-error" role="alert"></p>
-          </section>
-        </div>
-      </details>
-      <div id="dependency-views" aria-label="Dependency view" hidden>
-        <input
-          id="graph-filter"
-          type="search"
-          aria-label="Filter graph by entity name"
-          autocomplete="off"
-          placeholder="Filter entity names"
-        />
-        <button type="button" data-view="all" aria-pressed="true">All</button>
-        <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
-        <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
-        <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
-        <button id="toggle-file-panel" type="button" aria-controls="file-panel" aria-expanded="false">File</button>
-        <details id="export-menu">
-          <summary>Export</summary>
-          <div class="export-menu-content">
-            <strong>Export filtered graph</strong>
-            <label for="export-resolution">Resolution</label>
-            <select id="export-resolution">
-              <option value="1">1×</option>
-              <option value="2" selected>2×</option>
-              <option value="4">4×</option>
-            </select>
-            <p id="export-dimensions" aria-live="polite"></p>
-            <button id="export-png" type="button">Export PNG</button>
-            <p id="export-status" role="status"></p>
+      <div class="workspace-toolbar">
+        <details id="entity-list" hidden>
+          <summary>Find Entity</summary>
+          <div class="entity-list-content">
+            <label for="entity-search">Search entities</label>
+            <input id="entity-search" type="search" autocomplete="off" placeholder="Search full entity names" />
+            <p id="entity-search-status" role="status"></p>
+            <ul id="entity-results"></ul>
           </div>
         </details>
+        <details id="colour-settings" hidden>
+          <summary>Settings</summary>
+          <div class="colour-settings-content">
+            <fieldset id="document-settings-fields">
+              <div class="colour-settings-actions">
+                <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
+                <button id="reset-colours" type="button">Reset</button>
+              </div>
+              <p>Colour entities when their full name contains this text. The first match wins.</p>
+              <p id="colour-error" role="alert"></p>
+              <div id="colour-rules"></div>
+              <section class="presentation-settings" aria-labelledby="presentation-heading">
+                <h3 id="presentation-heading">Graph presentation</h3>
+                <label><input id="compact-nodes" type="checkbox" /> Compact nodes</label>
+                <label><input id="tooltips-enabled" type="checkbox" checked /> Show hover tooltips</label>
+                <button id="reset-presentation" type="button">Reset presentation</button>
+                <p id="presentation-error" role="alert"></p>
+              </section>
+            </fieldset>
+          </div>
+        </details>
+        <div id="dependency-views" aria-label="Dependency view" hidden>
+          <button type="button" data-view="all" aria-pressed="true">All</button>
+          <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
+          <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
+          <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
+          <details id="filter-menu">
+            <summary>Filter <span id="active-filter"></span></summary>
+            <div class="filter-menu-content">
+              <label for="graph-filter">Filter graph by Entity name</label>
+              <input id="graph-filter" type="search" autocomplete="off" placeholder="Filter entity names" />
+              <button id="clear-graph-filter" type="button" aria-label="Clear graph filter" hidden>Clear</button>
+            </div>
+          </details>
+          <details id="export-menu">
+            <summary>Export</summary>
+            <div class="export-menu-content">
+              <strong>Export filtered graph</strong>
+              <label for="export-resolution">Resolution</label>
+              <select id="export-resolution">
+                <option value="1">1×</option>
+                <option value="2" selected>2×</option>
+                <option value="4">4×</option>
+              </select>
+              <p id="export-dimensions" aria-live="polite"></p>
+              <button id="export-png" type="button">Export PNG</button>
+              <p id="export-status" role="status"></p>
+            </div>
+          </details>
+        </div>
       </div>
       <div class="controls" aria-label="Graph navigation" hidden>
         <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
@@ -177,12 +228,16 @@
         <button id="fit" type="button">Reset to fit</button>
         <button id="edge-motion" type="button">Pause</button>
       </div>
+      <section id="inspector" role="region" tabindex="-1" aria-label="Entity details" hidden>
+        <div class="inspector-header">
+          <strong>Entity details</strong>
+          <button id="move-inspector" type="button">Move card</button>
+          <button id="move-entity" type="button" aria-describedby="entity-move-instructions" hidden>Move Entity</button>
+          <button id="close-inspector" type="button" aria-label="Close Entity details">×</button>
+        </div>
+        <p id="entity-move-instructions" hidden>Use arrow keys to move, Enter to finish, or Escape to cancel.</p>
+        <div id="selection-status">No entity selected. Select an entity to inspect its details.</div>
+      </section>
     </main>
-    <footer>
-      <details id="inspector" open>
-        <summary>Entity details</summary>
-        <div id="selection-status" aria-live="polite">No entity selected. Select an entity to inspect its details.</div>
-      </details>
-    </footer>
   </body>
 </html>

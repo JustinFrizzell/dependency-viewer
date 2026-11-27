@@ -12,6 +12,7 @@ type InspectionOptions = {
   requireNoConflictingFormDraft: (owner?: string) => void;
   updateDocumentControls: () => void;
   refreshDocument: (selectedName?: string) => void;
+  editProperties: (name: string) => void;
 };
 
 export function setupEntityInspection({
@@ -22,6 +23,7 @@ export function setupEntityInspection({
   requireNoConflictingFormDraft,
   updateDocumentControls,
   refreshDocument,
+  editProperties,
 }: InspectionOptions) {
   const inspector = document.getElementById('selection-status') as HTMLElement;
   let entityDraft: Draft | null = null;
@@ -32,13 +34,11 @@ export function setupEntityInspection({
   function canChangeSelection() {
     if (hasEntityDraft()) {
       entityDraft!.error.textContent = 'Error: Apply or discard the Entity draft before changing selection.';
-      (document.getElementById('inspector') as HTMLDetailsElement).open = true;
       return false;
     }
     if (hasDependencyDraft()) {
       dependencyDraft!.error.textContent =
         'Error: Apply or discard the Direct dependency draft before changing selection.';
-      (document.getElementById('inspector') as HTMLDetailsElement).open = true;
       return false;
     }
     return true;
@@ -51,14 +51,13 @@ export function setupEntityInspection({
     const heading = document.createElement('h2');
     heading.textContent = entity.name;
     inspector.appendChild(heading);
-    if (!entity.documented) {
-      const badge = document.createElement('span');
-      badge.className = 'undocumented-badge';
-      badge.textContent = 'Undocumented entity';
-      inspector.appendChild(badge);
-    }
+    const badge = document.createElement('span');
+    badge.className = entity.documented ? 'documented-badge' : 'undocumented-badge';
+    badge.textContent = entity.documented ? 'Documented entity' : 'Undocumented entity';
+    inspector.appendChild(badge);
     const form = document.createElement('form');
     form.id = 'edit-entity-form';
+    form.className = 'edit-only';
     form.noValidate = true;
     const nameLabel = document.createElement('label');
     nameLabel.htmlFor = 'edit-entity-name';
@@ -122,11 +121,28 @@ export function setupEntityInspection({
       }
     });
     inspector.appendChild(form);
+    if (entity.documented) {
+      const propertiesButton = document.createElement('button');
+      propertiesButton.type = 'button';
+      propertiesButton.className = 'edit-only';
+      propertiesButton.textContent = 'Edit properties';
+      propertiesButton.addEventListener('click', () => {
+        try {
+          requireNoConflictingFormDraft();
+          editProperties(name);
+        } catch (reason) {
+          error.textContent = `Error: ${(reason as Error).message}`;
+        }
+      });
+      inspector.appendChild(propertiesButton);
+    }
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.id = 'delete-entity';
+    deleteButton.className = 'edit-only';
     deleteButton.textContent = 'Remove Entity';
     const confirmation = document.createElement('fieldset');
+    confirmation.className = 'edit-only';
     confirmation.hidden = true;
     const prompt = document.createElement('legend');
     prompt.textContent =
@@ -225,6 +241,7 @@ export function setupEntityInspection({
           if (remove) {
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
+            removeButton.className = 'edit-only';
             removeButton.textContent = 'Remove';
             removeButton.setAttribute('aria-label', `Remove Direct dependency ${relatedName}`);
             removeButton.addEventListener('click', () => remove(relatedName));
@@ -249,6 +266,8 @@ export function setupEntityInspection({
         documentEdits.editDependency(session, name, dependency, add);
         dependencyDraft = null;
         refreshDocument(name);
+        (document.getElementById('connection-status') as HTMLElement).textContent =
+          `${add ? 'Added' : 'Removed'} ${dependency} as a Direct dependency of ${name}.`;
         (document.getElementById('new-dependency-name') as HTMLInputElement).focus();
       } catch (problem) {
         if (add && validating) dependencyRejected = true;
@@ -266,6 +285,7 @@ export function setupEntityInspection({
     if (entity.documented) {
       const form = document.createElement('form');
       form.id = 'add-dependency-form';
+      form.className = 'edit-only';
       form.noValidate = true;
       const label = document.createElement('label');
       label.htmlFor = 'new-dependency-name';
@@ -274,7 +294,15 @@ export function setupEntityInspection({
       input.id = 'new-dependency-name';
       input.type = 'text';
       input.autocomplete = 'off';
+      input.setAttribute('list', 'dependency-candidates');
       input.setAttribute('aria-describedby', 'dependency-error');
+      const candidates = document.createElement('datalist');
+      candidates.id = 'dependency-candidates';
+      for (const candidate of entities.values()) {
+        const option = document.createElement('option');
+        option.value = candidate.name;
+        candidates.appendChild(option);
+      }
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.textContent = 'Add dependency';
@@ -289,7 +317,7 @@ export function setupEntityInspection({
         dependencyError.textContent = '';
         updateDocumentControls();
       });
-      form.append(label, input, submit, discard, dependencyError);
+      form.append(label, input, candidates, submit, discard, dependencyError);
       form.addEventListener('input', () => {
         dependencyRejected = false;
         dependencyError.textContent = '';

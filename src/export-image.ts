@@ -1,4 +1,4 @@
-import type { Core } from 'cytoscape';
+import type { Core, ExportBlobPromiseOptions } from 'cytoscape';
 
 const MAX_SIDE = 8192;
 const MAX_PIXELS = 32000000;
@@ -36,7 +36,12 @@ async function addPadding(window: Window & typeof globalThis, document: Document
   }
 }
 
-export function setupImageExport(window: Window & typeof globalThis, document: Document, graph: Core) {
+export function setupImageExport(
+  window: Window & typeof globalThis,
+  document: Document,
+  graph: Core,
+  capture: (options: ExportBlobPromiseOptions) => Promise<Blob> = (options) => graph.png(options),
+) {
   const resolution = document.getElementById('export-resolution') as HTMLSelectElement;
   const dimensions = document.getElementById('export-dimensions')!;
   const button = document.getElementById('export-png') as HTMLButtonElement;
@@ -80,7 +85,7 @@ export function setupImageExport(window: Window & typeof globalThis, document: D
     update();
     let failed = false;
     try {
-      const graphBlob = await graph.png({
+      const graphBlob = await capture({
         full: true,
         bg: '#ffffff',
         maxWidth: image.graphWidth,

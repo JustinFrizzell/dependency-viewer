@@ -6,18 +6,34 @@ import * as documentEdits from './document-edits';
 import { setupColourSettings, writeColourSettings } from './colour-settings';
 import { setupPresentationSettings, writePresentationSettings } from './presentation-settings';
 import { showGraph } from './graph-navigation';
+import { setupTheme } from './theme';
 import type { Graph } from './document-types';
 
+setupTheme(window, document);
 const fileInput = document.getElementById('dependency-file') as HTMLInputElement;
 const fileError = document.getElementById('file-error') as HTMLElement;
 const filePanel = document.getElementById('file-panel') as HTMLElement;
 const mainTemplate = document.querySelector('main')!.cloneNode(true);
-const footerTemplate = document.querySelector('footer')!.cloneNode(true);
 (document.getElementById('status') as HTMLElement).textContent = 'Choose a JSON file to view dependencies.';
+const header = document.querySelector('header')!;
+let toolbarObserver: ResizeObserver | undefined;
+function positionSurfaces() {
+  const top = header.getBoundingClientRect().bottom + 8;
+  const toolbar = document.querySelector<HTMLElement>('.workspace-toolbar');
+  document.documentElement.style.setProperty('--toolbar-top', `${top}px`);
+  document.documentElement.style.setProperty('--editor-top', `${top + (toolbar?.offsetHeight || 0) + 8}px`);
+}
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(positionSurfaces).observe(header);
 let cleanupGraph = () => {};
 let resizeGraph = () => {};
+let selectGraphEntity: (name: string) => boolean = () => false;
+let getCardState: ReturnType<typeof showGraph>['cardState'] = () => undefined;
+let getNavigationState: () => ReturnType<ReturnType<typeof showGraph>['navigationState']> | undefined = () => undefined;
+let getLayoutState: ReturnType<typeof showGraph>['layoutState'];
+let newEntityPosition: cytoscape.Position | undefined;
 let selection = 0;
 let session: DocumentSession | null = null;
+let mode: 'view' | 'edit' = 'view';
 let documentName = 'dependency-document.json';
 const metadataEntity = document.getElementById('metadata-entity') as HTMLSelectElement;
 const metadataProperty = document.getElementById('metadata-property') as HTMLSelectElement;
@@ -89,9 +105,20 @@ function openDocument(raw: string, name: string) {
   }
   if (isUnsaved() && !window.confirm('Replace the Document and lose unsaved changes and drafts?')) return;
   session = createDocumentSession(nextDocument);
+  mode = 'view';
+  (document.getElementById('draft-resolution') as HTMLElement).hidden = true;
+  for (const id of ['document-panel', 'add-entity-panel', 'metadata-panel']) {
+    (document.getElementById(id) as HTMLDetailsElement).open = false;
+  }
   inspection = null;
   newEntityRejected = false;
+  newEntityPosition = undefined;
+  document.body.dataset.loaded = 'true';
   documentName = name;
+  (document.getElementById('document-name') as HTMLElement).textContent = name;
+  (document.getElementById('document-name') as HTMLElement).title = name;
+  (document.getElementById('open-prompt') as HTMLElement).hidden = true;
+  (document.getElementById('file-document-actions') as HTMLElement).hidden = false;
   (document.getElementById('add-entity-form') as HTMLFormElement).reset();
   resetMetadata();
   updateDocumentControls();
@@ -103,37 +130,80 @@ function openDocument(raw: string, name: string) {
   renderGraph(graph);
   fileError.textContent = '';
   (document.getElementById('file-name') as HTMLElement).textContent = name;
+  updateDocumentControls();
 }
 
-function renderGraph(graph: Graph, selectedName?: string) {
+function renderGraph(
+  graph: Graph,
+  selectedName?: string,
+  preserveCard = false,
+  position?: cytoscape.Position,
+  selectEditedEntity = false,
+) {
+  const cardState = preserveCard ? getCardState() : undefined;
+  const navigationState = preserveCard ? getNavigationState() : undefined;
+  const layoutState = position && selectedName ? getLayoutState() : undefined;
+  if (layoutState && position && selectedName) layoutState.positions.set(selectedName, position);
   cleanupGraph();
   inspection = null;
+  toolbarObserver?.disconnect();
   document.querySelector('main')!.replaceWith(mainTemplate.cloneNode(true));
-  document.querySelector('footer')!.replaceWith(footerTemplate.cloneNode(true));
+  if (typeof ResizeObserver !== 'undefined') {
+    const toolbar = document.querySelector('.workspace-toolbar')!;
+    toolbarObserver = new ResizeObserver(positionSurfaces);
+    toolbarObserver.observe(toolbar);
+  }
   displayedGraph = JSON.stringify(graph);
-  filePanel.hidden = graph.entities.length > 0;
+  filePanel.hidden = true;
   (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute(
     'aria-expanded',
     String(!filePanel.hidden),
   );
-  if (graph.entities.length) {
-    const navigation = showGraph(graph, selectedName, {
-      session: session!,
-      setupDocumentSettings,
-      tooltipsEnabled: () => presentationControls.tooltipsEnabled(),
-      requireNoConflictingFormDraft,
-      updateDocumentControls,
-      refreshDocument,
-    });
-    inspection = navigation.inspection;
-    cleanupGraph = navigation.cleanup;
-    resizeGraph = navigation.resize;
-  } else {
-    cleanupGraph = () => {};
-    resizeGraph = () => {};
+  const navigation = showGraph(graph, selectedName, {
+    session: session!,
+    cardState,
+    navigationState,
+    layoutState,
+    selectEditedEntity,
+    setupDocumentSettings,
+    tooltipsEnabled: () => presentationControls.tooltipsEnabled(),
+    requireNoConflictingFormDraft,
+    updateDocumentControls,
+    refreshDocument,
+    resolveSelectionDraft: (name) => {
+      resolutionError.textContent = '';
+      showDraftResolution(name);
+    },
+    hasOtherEntityDraft: () => hasMetadataDraft() || hasNewEntityDraft(),
+    createEntityAt: (x, y, position) => {
+      newEntityPosition = { ...position };
+      const panel = document.getElementById('add-entity-panel') as HTMLDetailsElement;
+      const surface = panel.querySelector<HTMLElement>('.floating-content')!;
+      panel.open = true;
+      surface.style.width = 'min(320px, calc(100vw - 24px))';
+      surface.style.left = `${Math.max(12, Math.min(x, window.innerWidth - surface.offsetWidth - 12))}px`;
+      surface.style.top = `${Math.max(12, Math.min(y, window.innerHeight - surface.offsetHeight - 12))}px`;
+      (document.getElementById('new-entity-name') as HTMLInputElement).focus();
+    },
+    editProperties: (name) => {
+      metadataEntity.value = name;
+      resetMetadataProperties();
+      const panel = document.getElementById('metadata-panel') as HTMLDetailsElement;
+      panel.open = true;
+      metadataProperty.focus();
+    },
+  });
+  if (!graph.entities.length) {
     (document.getElementById('status') as HTMLElement).textContent = 'No entities in this dependency dataset.';
-    setupDocumentSettings({ nodes: () => [] } as unknown as cytoscape.Core);
   }
+  inspection = navigation.inspection;
+  selectGraphEntity = navigation.selectEntity;
+  getCardState = navigation.cardState;
+  getNavigationState = navigation.navigationState;
+  getLayoutState = navigation.layoutState;
+  cleanupGraph = navigation.cleanup;
+  resizeGraph = navigation.resize;
+  updateDocumentControls();
 }
 
 function updateDocumentControls() {
@@ -143,6 +213,14 @@ function updateDocumentControls() {
   const editor = document.getElementById('document-json') as HTMLTextAreaElement;
   if (editor.value !== session.draft()) editor.value = session.draft();
   editor.disabled = formDraft;
+  editor.readOnly = mode === 'view';
+  const modeChanged = document.body.dataset.mode !== mode;
+  document.body.dataset.mode = mode;
+  if (modeChanged) document.dispatchEvent(new Event('modechange'));
+  (document.getElementById('mode-view') as HTMLButtonElement).setAttribute('aria-pressed', String(mode === 'view'));
+  (document.getElementById('mode-edit') as HTMLButtonElement).setAttribute('aria-pressed', String(mode === 'edit'));
+  (document.getElementById('mode-edit') as HTMLButtonElement).disabled = false;
+  (document.getElementById('document-settings-fields') as HTMLFieldSetElement).disabled = mode === 'view';
   (document.getElementById('unsaved-indicator') as HTMLElement).textContent = isUnsaved() ? '— Unsaved changes' : '';
   (document.getElementById('apply-document') as HTMLButtonElement).disabled = !session.hasDraft() || formDraft;
   (document.getElementById('discard-document') as HTMLButtonElement).disabled = !session.hasDraft();
@@ -150,6 +228,8 @@ function updateDocumentControls() {
   (document.getElementById('redo-document') as HTMLButtonElement).disabled = !session.canRedo() || formDraft;
   (document.getElementById('download-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
   (document.getElementById('copy-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
+  (document.getElementById('file-copy-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
+  (document.getElementById('file-download-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
   const status = document.getElementById('document-status') as HTMLElement;
   if (formDraft) status.textContent = 'Apply or discard the form draft before saving.';
   else if (status.textContent === 'Apply or discard the form draft before saving.') status.textContent = '';
@@ -160,7 +240,127 @@ function updateDocumentControls() {
     metadataDraft || metadataProperty.value === '';
 }
 
-function refreshDocument(selectedName?: string) {
+(document.getElementById('mode-edit') as HTMLButtonElement).addEventListener('click', () => {
+  if (!session) return;
+  resolutionPanel.hidden = true;
+  mode = 'edit';
+  updateDocumentControls();
+});
+const resolutionPanel = document.getElementById('draft-resolution') as HTMLElement;
+const resolutionActions = document.getElementById('draft-resolution-actions') as HTMLElement;
+const resolutionError = document.getElementById('draft-resolution-error') as HTMLElement;
+const resolutionDescription = document.getElementById('draft-resolution-description') as HTMLElement;
+const resolutionStay = document.getElementById('draft-stay') as HTMLButtonElement;
+let resolutionReturnFocus: HTMLElement | null = null;
+function drafts() {
+  return [
+    {
+      name: 'JSON',
+      active: () => session!.hasDraft(),
+      apply: '#apply-document',
+      discard: '#discard-document',
+      error: '#document-error',
+    },
+    {
+      name: 'property',
+      active: hasMetadataDraft,
+      apply: '#metadata-form',
+      discard: '#metadata-discard',
+      error: '#metadata-error',
+    },
+    {
+      name: 'Entity',
+      active: hasEntityDraft,
+      apply: '#edit-entity-form',
+      discard: '#discard-entity-draft',
+      error: '#edit-entity-error',
+    },
+    {
+      name: 'Direct dependency',
+      active: hasDependencyDraft,
+      apply: '#add-dependency-form',
+      discard: '#discard-dependency-draft',
+      error: '#dependency-error',
+    },
+    {
+      name: 'new Entity',
+      active: hasNewEntityDraft,
+      apply: '#add-entity-form',
+      discard: '#discard-new-entity-draft',
+      error: '#add-entity-error',
+    },
+  ].filter((draft) => draft.active());
+}
+function showDraftResolution(selectionName?: string) {
+  if (resolutionPanel.hidden)
+    resolutionReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  resolutionPanel.setAttribute(
+    'aria-label',
+    selectionName ? 'Resolve drafts before changing Entity' : 'Resolve drafts before leaving Edit',
+  );
+  resolutionDescription.textContent = selectionName
+    ? 'Apply or discard each draft before changing Entity. If drafts conflict, discard one before applying another.'
+    : 'Apply or discard each draft before leaving Edit. If drafts conflict, discard one before applying another.';
+  resolutionStay.textContent = selectionName ? 'Stay on current Entity' : 'Stay in Edit';
+  const pending = drafts();
+  resolutionActions.replaceChildren();
+  if (!pending.length) {
+    resolutionPanel.hidden = true;
+    if (selectionName) selectGraphEntity(selectionName);
+    else {
+      mode = 'view';
+      updateDocumentControls();
+      (document.getElementById('mode-view') as HTMLButtonElement).focus();
+    }
+    return;
+  }
+  resolutionPanel.hidden = false;
+  for (const draft of pending) {
+    const row = document.createElement('div');
+    for (const action of ['apply', 'discard'] as const) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = `${action === 'apply' ? 'Apply' : 'Discard'} ${draft.name} draft`;
+      button.addEventListener('click', () => {
+        resolutionError.textContent = '';
+        if (!draft.active()) {
+          showDraftResolution(selectionName);
+          return;
+        }
+        if (action === 'apply' && drafts().length > 1) {
+          resolutionError.textContent = 'Discard conflicting drafts before applying another draft.';
+          return;
+        }
+        const target = document.querySelector<HTMLElement>(draft[action])!;
+        if (target instanceof HTMLFormElement) target.requestSubmit();
+        else target.click();
+        if (draft.active()) {
+          resolutionError.textContent =
+            document.querySelector<HTMLElement>(draft.error)?.textContent || 'Draft could not be applied.';
+        } else {
+          showDraftResolution(selectionName);
+        }
+      });
+      row.appendChild(button);
+    }
+    resolutionActions.appendChild(row);
+  }
+  resolutionActions.querySelector<HTMLButtonElement>('button')?.focus();
+}
+(document.getElementById('draft-stay') as HTMLButtonElement).addEventListener('click', () => {
+  resolutionPanel.hidden = true;
+  resolutionError.textContent = '';
+  if (resolutionReturnFocus?.isConnected) resolutionReturnFocus.focus();
+  else (document.getElementById('mode-edit') as HTMLButtonElement).focus();
+  resolutionReturnFocus = null;
+});
+(document.getElementById('mode-view') as HTMLButtonElement).addEventListener('click', () => {
+  if (!session) return;
+  resolutionError.textContent = '';
+  showDraftResolution();
+});
+
+function refreshDocument(selectedName?: string, position?: cytoscape.Position, selectEditedEntity = false) {
   resetMetadata(selectedName);
   updateDocumentControls();
   (document.getElementById('document-error') as HTMLElement).textContent = '';
@@ -169,7 +369,7 @@ function refreshDocument(selectedName?: string) {
   if (JSON.stringify(graph) === displayedGraph) {
     colourControls.update(JSON.parse(session!.current()));
     presentationControls.update(JSON.parse(session!.current()));
-  } else renderGraph(graph, selectedName);
+  } else renderGraph(graph, selectedName, true, position, selectEditedEntity);
 }
 
 function resetMetadata(selectedName = metadataEntity.value) {
@@ -258,6 +458,14 @@ for (const input of [metadataKey, metadataValue]) {
   panel.querySelector('summary')!.focus();
 });
 
+(document.querySelector('#add-entity-panel summary') as HTMLElement).addEventListener('click', () => {
+  newEntityPosition = undefined;
+  const surface = document.querySelector<HTMLElement>('#add-entity-panel .floating-content')!;
+  surface.style.removeProperty('width');
+  surface.style.removeProperty('left');
+  surface.style.removeProperty('top');
+});
+
 (document.getElementById('add-entity-form') as HTMLFormElement).addEventListener('submit', (event) => {
   event.preventDefault();
   const name = (document.getElementById('new-entity-name') as HTMLInputElement).value;
@@ -271,7 +479,9 @@ for (const input of [metadataKey, metadataValue]) {
     (event.target as HTMLFormElement).reset();
     newEntityRejected = false;
     (document.getElementById('add-entity-error') as HTMLElement).textContent = '';
-    refreshDocument(name);
+    const position = newEntityPosition;
+    newEntityPosition = undefined;
+    refreshDocument(name, position, true);
   } catch (error) {
     if (validating) newEntityRejected = true;
     (document.getElementById('add-entity-error') as HTMLElement).textContent = `Error: ${(error as Error).message}`;
@@ -284,6 +494,7 @@ for (const input of [metadataKey, metadataValue]) {
   updateDocumentControls();
 });
 (document.getElementById('discard-new-entity-draft') as HTMLButtonElement).addEventListener('click', () => {
+  newEntityPosition = undefined;
   (document.getElementById('add-entity-form') as HTMLFormElement).reset();
   newEntityRejected = false;
   (document.getElementById('add-entity-error') as HTMLElement).textContent = '';
@@ -366,10 +577,10 @@ window.addEventListener('beforeunload', (event) => {
 });
 
 fileInput.addEventListener('change', () => {
+  const current = ++selection;
   const file = fileInput.files![0];
   if (!file) return;
   fileInput.value = '';
-  const current = ++selection;
   const reader = new FileReader();
   reader.onload = () => {
     if (current !== selection) return;
@@ -384,6 +595,27 @@ fileInput.addEventListener('change', () => {
     if (current === selection) fileError.textContent = 'Error: could not read the selected file. Choose it again.';
   }
 });
+fileInput.addEventListener('cancel', () => {
+  selection++;
+});
+
+(document.getElementById('file-view-document') as HTMLButtonElement).addEventListener('click', () => {
+  filePanel.hidden = true;
+  (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+  (document.getElementById('document-panel') as HTMLDetailsElement).open = true;
+  (document.getElementById('document-json') as HTMLTextAreaElement).focus();
+});
+
+for (const action of ['copy', 'download']) {
+  document.getElementById(`file-${action}-document`)!.addEventListener('click', () => {
+    if (action === 'copy') {
+      filePanel.hidden = true;
+      (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+      (document.getElementById('document-panel') as HTMLDetailsElement).open = true;
+    }
+    (document.getElementById(`${action}-document`) as HTMLButtonElement).click();
+  });
+}
 
 document.addEventListener('click', (event) => {
   const button = (event.target as Element).closest('#toggle-file-panel');

@@ -112,8 +112,8 @@ export function setupColourSettings(
     graph.nodes().forEach((node) => {
       const name = node.data('name').toLowerCase();
       const match = active.find((rule) => name.includes(rule.text));
-      if (match) node.style('background-color', match.colour);
-      else node.removeStyle('background-color');
+      if (match) node.style({ 'background-color': match.colour, color: '#172b3a' });
+      else node.removeStyle('background-color color');
     });
   }
 

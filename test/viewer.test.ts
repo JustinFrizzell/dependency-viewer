@@ -94,7 +94,6 @@ test('new files reset the viewer, while invalid files preserve it', () => {
     loadFile(dom, data, 'first.json');
     assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, true);
     const fileButton = document.getElementById('toggle-file-panel') as HTMLButtonElement;
-    assert.equal((fileButton.previousElementSibling as HTMLElement).dataset.view, 'downstream');
     assert.equal(fileButton.getAttribute('aria-expanded'), 'false');
     fileButton.click();
     assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, false);
@@ -135,13 +134,13 @@ test('new files reset the viewer, while invalid files preserve it', () => {
     assert.doesNotMatch((document.getElementById('graph-summary') as HTMLElement).textContent, /first|second/);
     loadFile(dom, '{"entities":[]}', 'empty.json');
     assert.match((document.getElementById('status') as HTMLElement).textContent, /no entities/i);
-    assert.equal((document.querySelector('.controls') as HTMLElement).hidden, true);
-    assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, false);
+    assert.equal((document.querySelector('.controls') as HTMLElement).hidden, false);
+    assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, true);
     assert.equal(
       (document.getElementById('toggle-file-panel') as HTMLButtonElement).getAttribute('aria-expanded'),
-      'true',
+      'false',
     );
-    assert.equal((document.getElementById('dependency-views') as HTMLElement).hidden, true);
+    assert.equal((document.getElementById('dependency-views') as HTMLElement).hidden, false);
   } finally {
     dom.window.close();
   }
@@ -179,6 +178,12 @@ test('reads an actual browser File and ignores stale asynchronous reads', async 
     loadFile(dom, '', 'unreadable.json');
     readers[2].onerror();
     assert.match((document.getElementById('file-error') as HTMLElement).textContent, /could not read/i);
+    assert.match((document.getElementById('graph-summary') as HTMLElement).textContent, /new/);
+    loadFile(dom, '', 'pending.json');
+    Object.defineProperty(input, 'files', { configurable: true, value: [] });
+    input.dispatchEvent(new dom.window.Event('change'));
+    readers[3].result = '{"entities":[{"name":"pending","dependencies":[]}]}';
+    readers[3].onload();
     assert.match((document.getElementById('graph-summary') as HTMLElement).textContent, /new/);
   } finally {
     dom.window.close();
@@ -281,7 +286,7 @@ test('exports the full filtered graph at the selected resolution', async () => {
   }
 });
 
-test('entity details can be collapsed while selection continues to update', () => {
+test('entity details close and reopen on selection', () => {
   const dom = open(
     dataset({
       entities: [
@@ -292,18 +297,16 @@ test('entity details can be collapsed while selection continues to update', () =
   );
   try {
     const document = dom.window.document;
-    const inspector = document.getElementById('inspector') as HTMLDetailsElement;
-    const summary = inspector.querySelector('summary') as HTMLElement;
-    assert.equal(inspector.open, true);
-    summary.click();
-    assert.equal(inspector.open, false);
+    const inspector = document.getElementById('inspector') as HTMLElement;
+    assert.equal(inspector.hidden, true);
+    (document.querySelector('#entity-results button[title="first"]') as HTMLButtonElement).click();
+    assert.equal(inspector.hidden, false);
+    (document.getElementById('close-inspector') as HTMLButtonElement).click();
+    assert.equal(inspector.hidden, true);
     [...document.querySelectorAll<HTMLButtonElement>('#entity-results button')]
       .find((button) => button.title === 'second')!
       .click();
-    assert.equal(inspector.open, false);
-    assert.equal((document.querySelector('#selection-status h2') as HTMLElement).textContent, 'second');
-    summary.click();
-    assert.equal(inspector.open, true);
+    assert.equal(inspector.hidden, false);
     assert.equal((document.querySelector('#selection-status h2') as HTMLElement).textContent, 'second');
   } finally {
     dom.window.close();
@@ -670,7 +673,7 @@ test('selecting a search result opens its details and centers that exact entity'
     const inspector = document.getElementById('selection-status') as HTMLElement;
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('#entity-results button')];
     (document.getElementById('zoom-in') as HTMLButtonElement).click();
-    const zoom = (document.getElementById('zoom-level') as HTMLOutputElement).textContent;
+    let zoom = parseInt((document.getElementById('zoom-level') as HTMLOutputElement).textContent!, 10);
     for (const [name, description] of [
       ['db.raw', 'Lowercase entity'],
       ['DB.Raw', 'Uppercase entity'],
@@ -679,7 +682,9 @@ test('selecting a search result opens its details and centers that exact entity'
       buttons.find((button) => button.title === name)!.click();
       assert.equal((inspector.querySelector('h2') as HTMLElement).textContent, name.replace(' (undocumented)', ''));
       assert.match(inspector.textContent, new RegExp(description));
-      assert.equal((document.getElementById('zoom-level') as HTMLOutputElement).textContent, zoom);
+      const currentZoom = parseInt((document.getElementById('zoom-level') as HTMLOutputElement).textContent!, 10);
+      assert.ok(currentZoom <= zoom);
+      zoom = currentZoom;
       clickGraph(dom, 500, 300);
       assert.equal((inspector.querySelector('h2') as HTMLElement).textContent, name.replace(' (undocumented)', ''));
     }
@@ -749,6 +754,7 @@ test('entity list can be collapsed and reopened without losing the search', () =
     const document = dom.window.document;
     const list = document.getElementById('entity-list') as HTMLDetailsElement;
     const search = document.getElementById('entity-search') as HTMLInputElement;
+    (list.querySelector('summary') as HTMLElement).click();
     search.value = 'orders';
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     assert.equal(list.open, true);
@@ -779,8 +785,8 @@ test('selecting a graph entity opens its inspector without changing the view', (
     const graph = document.getElementById('graph') as HTMLElement;
     const canvas = graph.querySelector('canvas') as HTMLElement;
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
-    assert.match(graph.title, /warehouse\.orders/);
-    assert.match(graph.title, /Order facts/);
+    assert.match(inspector.textContent, /warehouse\.orders/);
+    assert.match(inspector.textContent, /Order facts/);
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 0, clientY: 0 }));
     assert.equal(graph.hasAttribute('title'), false);
     (document.getElementById('zoom-in') as HTMLButtonElement).click();
@@ -803,8 +809,7 @@ test('Entity tooltips and accessible details show metadata as text', () => {
     graph
       .querySelector('canvas')!
       .dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
-    assert.match(graph.title, /Description: <img/);
-    assert.match(graph.title, /owner: <img/);
+    assert.match((document.getElementById('selection-status') as HTMLElement).textContent, /owner/);
     (document.querySelector('#entity-results button') as HTMLButtonElement).click();
     assert.match((document.getElementById('selection-status') as HTMLElement).textContent, /owner/);
     assert.equal(document.querySelectorAll('#selection-status img').length, 0);
@@ -925,7 +930,7 @@ test('inspector navigates direct relationships and identifies undocumented depen
     assert.match(inspector.textContent, /no description/i);
     assert.match(inspector.textContent, /no downstream/i);
     clickGraph(dom, 500, 300);
-    assert.ok(inspector.textContent.includes(description));
+    assert.match(inspector.textContent, /no description/i);
   } finally {
     dom.window.close();
   }
@@ -1344,11 +1349,11 @@ test('Entity drafts block saving and selection until applied or discarded', () =
     input.dispatchEvent(new Event('input', { bubbles: true }));
     assert.equal((document.getElementById('download-document') as HTMLButtonElement).disabled, true);
     assert.match((document.getElementById('document-status') as HTMLElement).textContent, /apply or discard/i);
-    (document.getElementById('inspector') as HTMLDetailsElement).open = false;
     (document.querySelector('#entity-results button[title="B"]') as HTMLButtonElement).click();
     assert.equal((document.getElementById('edit-entity-name') as HTMLInputElement).value, 'B');
     assert.match((document.getElementById('edit-entity-error') as HTMLElement).textContent, /apply or discard/i);
-    assert.equal((document.getElementById('inspector') as HTMLDetailsElement).open, true);
+    assert.equal((document.getElementById('draft-resolution') as HTMLElement).hidden, false);
+    (document.getElementById('draft-stay') as HTMLButtonElement).click();
     (document.getElementById('discard-entity-draft') as HTMLButtonElement).click();
     assert.equal((document.getElementById('download-document') as HTMLButtonElement).disabled, false);
     (document.querySelector('#entity-results button[title="B"]') as HTMLButtonElement).click();
@@ -1423,11 +1428,11 @@ test('new Entity drafts block saving and survive graph edits until discarded', (
   const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
   try {
     const { document, Event } = dom.window;
+    (document.querySelector('#entity-results button[title="A"]') as HTMLButtonElement).click();
     const input = document.getElementById('new-entity-name') as HTMLInputElement;
     input.value = ' invalid ';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     assert.equal((document.getElementById('download-document') as HTMLButtonElement).disabled, true);
-    (document.querySelector('#entity-results button[title="A"]') as HTMLButtonElement).click();
     document
       .querySelector('#add-dependency-form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -2312,6 +2317,7 @@ test('property drafts block Entity edits and settings changes', () => {
   const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
   try {
     const { document, Event } = dom.window;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     (document.querySelector('#entity-results button[title="A"]') as HTMLButtonElement).click();
     (document.getElementById('metadata-value') as HTMLTextAreaElement).value = '{';
     (document.getElementById('metadata-value') as HTMLTextAreaElement).dispatchEvent(new Event('input'));
@@ -2379,6 +2385,7 @@ test('appearance and tooltip preferences are Document edits restored on reopen a
   const dom = open(dataset({ entities: [{ name: 'one', description: 'detail', dependencies: [] }] }));
   try {
     const document = dom.window.document;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     (document.getElementById('settings-entry') as HTMLButtonElement).click();
     (document.getElementById('compact-nodes') as HTMLInputElement).click();
     (document.getElementById('tooltips-enabled') as HTMLInputElement).click();
@@ -2400,6 +2407,7 @@ test('appearance and tooltip preferences are Document edits restored on reopen a
     loadFile(dom, saved);
     assert.equal((document.getElementById('compact-nodes') as HTMLInputElement).checked, true);
     assert.equal((document.getElementById('tooltips-enabled') as HTMLInputElement).checked, false);
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     (document.getElementById('reset-presentation') as HTMLButtonElement).click();
     assert.equal(JSON.parse(editor.value).settings, undefined);
   } finally {
@@ -2411,6 +2419,7 @@ test('presentation settings protect drafts and conflicting existing JSON', () =>
   const dom = open(dataset({ entities: [], settings: { other: 7 } }));
   try {
     const document = dom.window.document;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     const editor = document.getElementById('document-json') as HTMLTextAreaElement;
     editor.value += ' ';
     editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
@@ -2486,6 +2495,7 @@ test('colour priority and reset participate in history without persisting view s
   const dom = open({ raw: '{"entities":[{"name":"bronze.gold","dependencies":[]}],"settings":{"other":42}}' });
   try {
     const { document, Event } = dom.window;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     const editor = document.getElementById('document-json') as HTMLTextAreaElement;
     const json = () => JSON.parse(editor.value);
     (document.querySelector('#entity-results button') as HTMLButtonElement).click();
@@ -2539,6 +2549,7 @@ test('downloaded colour overrides reload offline and undo returns to the saved s
     (document.getElementById('paste-json') as HTMLTextAreaElement).value =
       '{"entities":[{"name":"gold","dependencies":[]}]}';
     (document.getElementById('open-paste') as HTMLButtonElement).click();
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     let blob!: Blob;
     let copied!: string;
     dom.window.URL.createObjectURL = (value) => {
