@@ -1111,6 +1111,10 @@ header label {
   color: #523700;
   border: 1px solid #956000;
   border-radius: 8px;
+  pointer-events: none;
+}
+#dismiss-small-screen {
+  pointer-events: auto;
 }
 body[data-small-screen='true'][data-controls-open='false'] header,
 body[data-small-screen='true'][data-controls-open='false'] .workspace-toolbar,
@@ -1191,7 +1195,7 @@ header,
 body[data-loaded] .file-panel:not([hidden]) {
   z-index: 15;
 }
-header:has(#entity-list[open], #colour-settings[open], #export-menu[open]) {
+header:has(#entity-list[open], #colour-settings[open], #export-menu[open], #metadata-panel[open]) {
   z-index: 14;
 }
 .workspace-toolbar {
@@ -1373,4 +1377,9 @@ body[data-small-screen='true']
   right: auto;
   max-height: max(80px, calc(100vh - var(--editor-top, 120px) - 8px));
   overflow: auto;
+}
+body[data-small-screen='true']:has(#small-screen-notice:not([hidden])) .entity-list-content {
+  --find-top: min(var(--editor-top, 120px), max(8px, calc(100vh - var(--small-notice-height, 90px) - 168px)));
+  top: var(--find-top);
+  max-height: max(0px, calc(100vh - var(--find-top) - var(--small-notice-height, 90px) - 16px));
 }

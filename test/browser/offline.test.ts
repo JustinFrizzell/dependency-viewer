@@ -113,6 +113,111 @@ test('small workspace controls can be reopened and the notice returns only on re
   }
 });
 
+test('Find results remain clickable while the small screen notice is visible', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 320, height: 500 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill(
+      JSON.stringify({
+        entities: Array.from({ length: 10 }, (_, index) => ({ name: `Entity ${index}`, dependencies: [] })),
+      }),
+    );
+    await page.locator('#open-paste').click();
+    await page.locator('#toggle-controls').click();
+    await openFind(page);
+    const find = (await page.locator('.entity-list-content').boundingBox())!;
+    const notice = (await page.locator('#small-screen-notice').boundingBox())!;
+    assert.ok(find.y + find.height <= notice.y, 'Find results must not be obscured by the notice');
+    await page.locator('#entity-results button[title="Entity 0"]').click({ timeout: 5000 });
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'Entity 0');
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), true);
+    await page.locator('#dismiss-small-screen').click();
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('property editing remains usable after minimizing controls on a small screen', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 375, height: 667 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[],"custom":1}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#dismiss-small-screen').click();
+    await page.locator('#toggle-controls').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#toggle-controls').click();
+    await openEntityEditor(page);
+    await page.getByRole('button', { name: 'Edit properties' }).click();
+    assert.equal(await page.locator('#metadata-property').isVisible(), true);
+    await page.locator('#metadata-property').selectOption({ label: 'custom' });
+    await page.locator('#metadata-value').fill('2');
+    await page.locator('#metadata-form button[type=submit]').click();
+    assert.equal(JSON.parse(await page.locator('#document-json').inputValue()).entities[0].custom, 2);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('closing a details card with a hidden Entity draft exposes its safeguard', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
+    await page.locator('#edit-entity-name').fill('Renamed');
+    await page.getByRole('button', { name: 'Close editor' }).click();
+    await page.locator('#close-inspector').click();
+    assert.equal(await page.locator('#edit-entity-error').isVisible(), true);
+    assert.match((await page.locator('#edit-entity-error').textContent())!, /apply or discard/i);
+    await page.locator('#discard-entity-draft').click();
+    await page.locator('#close-inspector').click();
+    assert.equal(await page.locator('#inspector').isVisible(), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('closing a card with a hidden Direct dependency draft returns focus to the draft', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
+    await page.locator('#new-dependency-name').fill('B');
+    await page.getByRole('button', { name: 'Close editor' }).click();
+    await page.locator('#close-inspector').click();
+    assert.equal(
+      await page.locator('#new-dependency-name').evaluate((element) => element === document.activeElement),
+      true,
+    );
+    assert.match((await page.locator('#dependency-error').textContent())!, /apply or discard/i);
+    await page.locator('#add-dependency-form button[type=submit]').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[0].dependencies, ['B']);
+    await page.locator('#close-inspector').click();
+    assert.equal(await page.locator('#inspector').isVisible(), false);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('Entity editing is explicitly opened from the compact details card', async () => {
   const browser = await chromium.launch({ headless: true });
   try {

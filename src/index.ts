@@ -12,6 +12,10 @@ import type { Graph } from './document-types';
 setupTheme(window, document);
 const controlsToggle = document.getElementById('toggle-controls') as HTMLButtonElement;
 const smallNotice = document.getElementById('small-screen-notice') as HTMLElement;
+function measureSmallNotice() {
+  document.documentElement.style.setProperty('--small-notice-height', `${smallNotice.offsetHeight}px`);
+}
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measureSmallNotice).observe(smallNotice);
 let smallScreen = false;
 function updateSmallScreen() {
   const small = window.innerWidth < 680 || window.innerHeight < 500;
@@ -24,6 +28,7 @@ function updateSmallScreen() {
   controlsToggle.setAttribute('aria-expanded', 'false');
   controlsToggle.setAttribute('aria-label', 'Show workspace controls');
   smallNotice.hidden = !small;
+  measureSmallNotice();
   if (small && active instanceof HTMLElement && active.closest('header, .workspace-toolbar, .controls'))
     controlsToggle.focus();
 }
@@ -38,7 +43,10 @@ controlsToggle.addEventListener('click', () => {
 (document.getElementById('dismiss-small-screen') as HTMLButtonElement).addEventListener('click', () => {
   smallNotice.hidden = true;
 });
-window.addEventListener('resize', updateSmallScreen);
+window.addEventListener('resize', () => {
+  updateSmallScreen();
+  measureSmallNotice();
+});
 updateSmallScreen();
 const fileInput = document.getElementById('dependency-file') as HTMLInputElement;
 const fileError = document.getElementById('file-error') as HTMLElement;
@@ -221,6 +229,7 @@ function renderGraph(
       (document.getElementById('new-entity-name') as HTMLInputElement).focus();
     },
     editProperties: (name) => {
+      if (smallScreen && controlsToggle.getAttribute('aria-expanded') !== 'true') controlsToggle.click();
       metadataEntity.value = name;
       resetMetadataProperties();
       const panel = document.getElementById('metadata-panel') as HTMLDetailsElement;

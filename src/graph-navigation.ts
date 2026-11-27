@@ -393,7 +393,13 @@ export function showGraph(
   });
   moveEntityButton.addEventListener('blur', () => finishEntityMove(true));
   (document.getElementById('close-inspector') as HTMLButtonElement).addEventListener('click', () => {
-    if (!inspection.canChangeSelection()) return;
+    if (!inspection.canChangeSelection()) {
+      if (!card.classList.contains('editor-open'))
+        card.querySelector<HTMLButtonElement>('.entity-editor-toggle')?.click();
+      const draftInput = inspection.hasEntityDraft() ? '#edit-entity-name' : '#new-dependency-name';
+      card.querySelector<HTMLInputElement>(draftInput)?.focus();
+      return;
+    }
     clearTimeout(dismissTimer);
     card.hidden = true;
     moved = false;
