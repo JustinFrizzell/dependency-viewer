@@ -903,3 +903,114 @@ main {
 #status {
   pointer-events: none;
 }
+
+/* Application theme is independent of Document appearance settings. */
+:root {
+  color-scheme: light;
+}
+button,
+input,
+select,
+textarea,
+#entity-list:not([hidden]),
+#colour-settings:not([hidden]),
+#filter-menu summary,
+#export-menu summary,
+#document-panel > summary,
+#add-entity-panel > summary,
+#metadata-panel > summary {
+  border-color: #708890;
+}
+.entity-result-prefix,
+footer h3,
+.entity-extras dt {
+  color: #526e79;
+}
+:focus-visible {
+  outline: 3px solid #006caa;
+  outline-offset: 2px;
+}
+header label {
+  color: #fff;
+}
+#theme-preference {
+  font: inherit;
+  padding: 7px;
+  border: 1px solid #708890;
+  border-radius: 6px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #edf5f5;
+}
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] main {
+  background-color: #10212a;
+}
+:root[data-theme='dark'] main {
+  background-image: radial-gradient(#344e59 0.8px, transparent 0.8px);
+}
+:root[data-theme='dark'] header {
+  background: #192f3a;
+}
+:root[data-theme='dark'] .file-panel,
+:root[data-theme='dark'] .document-panel:not(#document-panel, #add-entity-panel, #metadata-panel),
+:root[data-theme='dark'] .floating-content,
+:root[data-theme='dark'] #status,
+:root[data-theme='dark'] #graph-filter-status,
+:root[data-theme='dark'] #graph-count,
+:root[data-theme='dark'] #entity-list,
+:root[data-theme='dark'] #colour-settings,
+:root[data-theme='dark'] .entity-list-content,
+:root[data-theme='dark'] .colour-settings-content,
+:root[data-theme='dark'] .filter-menu-content,
+:root[data-theme='dark'] .export-menu-content,
+:root[data-theme='dark'] footer,
+:root[data-theme='dark'] #zoom-level {
+  color: #edf5f5;
+  background: #1d3440;
+  border-color: #86a4aa;
+}
+:root[data-theme='dark'] button,
+:root[data-theme='dark'] input:not([type='checkbox'], [type='file']),
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea,
+:root[data-theme='dark'] #filter-menu summary,
+:root[data-theme='dark'] #export-menu summary,
+:root[data-theme='dark'] #document-panel > summary,
+:root[data-theme='dark'] #add-entity-panel > summary,
+:root[data-theme='dark'] #metadata-panel > summary {
+  color: #edf5f5;
+  background: #29444f;
+  border-color: #91abb0;
+}
+:root[data-theme='dark'] button:hover,
+:root[data-theme='dark'] #export-menu summary:hover {
+  background: #395c65;
+}
+:root[data-theme='dark'] button[aria-pressed='true'] {
+  color: #10212a;
+  background: #7ce0ce;
+  border-color: #7ce0ce;
+}
+:root[data-theme='dark'] .entity-result-prefix,
+:root[data-theme='dark'] .colour-settings-content p,
+:root[data-theme='dark'] .export-menu-content p,
+:root[data-theme='dark'] footer h3,
+:root[data-theme='dark'] footer h2,
+:root[data-theme='dark'] .entity-extras dt {
+  color: #c1d5d9;
+}
+:root[data-theme='dark'] .related-entity,
+:root[data-theme='dark'] .file-panel summary,
+:root[data-theme='dark'] .document-panel summary {
+  color: #8fe6d7;
+}
+:root[data-theme='dark'] [role='alert'],
+:root[data-theme='dark'] #export-status:not(:empty) {
+  color: #ffb3aa;
+}
+:root[data-theme='dark'] :focus-visible {
+  outline-color: #91d8ff;
+}
