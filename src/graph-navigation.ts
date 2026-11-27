@@ -152,7 +152,12 @@ export function showGraph(
     session,
     entities,
     downstream,
-    selectEntity,
+    selectEntity: (name) => {
+      if (!selectEntity(name)) return false;
+      graph.center(graph.getElementById(ids.get(name)!));
+      card.focus();
+      return true;
+    },
     requireNoConflictingFormDraft,
     updateDocumentControls,
     refreshDocument,
@@ -221,20 +226,32 @@ export function showGraph(
   const card = document.getElementById('inspector') as HTMLElement;
   const cardHeader = card.querySelector<HTMLElement>('.inspector-header')!;
   const moveButton = document.getElementById('move-inspector') as HTMLButtonElement;
+  const moveEntityButton = document.getElementById('move-entity') as HTMLButtonElement;
+  const entityMoveInstructions = document.getElementById('entity-move-instructions') as HTMLElement;
+  const announcement = document.getElementById('inspection-announcement') as HTMLElement;
   let invokingControl: HTMLElement | null = null;
   let moved = false;
   let persistent = false;
   let displayedName: string | null = null;
   let keyboardStart: { left: number; top: number; moved: boolean; persistent: boolean } | null = null;
+  let entityMove: { name: string; x: number; y: number } | null = null;
   let dismissTimer: ReturnType<typeof setTimeout> | undefined;
   function moveCard(left: number, top: number) {
     card.style.left = `${Math.max(0, Math.min(graph.width() - card.offsetWidth, left))}px`;
     card.style.top = `${Math.max(0, Math.min(graph.height() - card.offsetHeight, top))}px`;
   }
   function inspectAutomatically(name: string) {
-    if (inspection.hasEntityDraft() || inspection.hasDependencyDraft() || hasOtherEntityDraft()) return;
+    if (
+      keyboardStart ||
+      entityMove ||
+      inspection.hasEntityDraft() ||
+      inspection.hasDependencyDraft() ||
+      hasOtherEntityDraft()
+    )
+      return;
     inspection.showEntity(name);
     displayedName = name;
+    moveEntityButton.hidden = name !== selected;
     card.hidden = false;
     if (!moved) positionCard(name);
   }
@@ -243,8 +260,14 @@ export function showGraph(
     const position = node.renderedPosition();
     const width = card.offsetWidth;
     const height = card.offsetHeight;
+    const toolbarBottom =
+      graph.width() <= 600
+        ? document.querySelector<HTMLElement>('.workspace-toolbar')!.getBoundingClientRect().bottom -
+          graph.container()!.getBoundingClientRect().top +
+          8
+        : 8;
     card.style.left = `${Math.max(8, Math.min(graph.width() - width - 8, position.x + node.renderedWidth() / 2 + 12))}px`;
-    card.style.top = `${Math.max(8, Math.min(graph.height() - height - 8, position.y - 20))}px`;
+    card.style.top = `${Math.max(toolbarBottom, Math.min(graph.height() - height - 8, position.y - 20))}px`;
   }
   cardHeader.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
@@ -299,6 +322,53 @@ export function showGraph(
       moveButton.textContent = 'Move card';
     }
   });
+  moveButton.addEventListener('blur', () => {
+    if (!keyboardStart) return;
+    moveCard(keyboardStart.left, keyboardStart.top);
+    moved = keyboardStart.moved;
+    persistent = keyboardStart.persistent;
+    keyboardStart = null;
+    moveButton.removeAttribute('aria-pressed');
+    moveButton.textContent = 'Move card';
+  });
+  function finishEntityMove(cancel: boolean) {
+    if (!entityMove) return;
+    const { name, x, y } = entityMove;
+    if (cancel) graph.getElementById(ids.get(name)!).position({ x, y });
+    entityMove = null;
+    moveEntityButton.removeAttribute('aria-pressed');
+    moveEntityButton.textContent = 'Move Entity';
+    entityMoveInstructions.hidden = true;
+    announcement.textContent = cancel ? `Movement of Entity ${name} cancelled.` : `Entity ${name} moved.`;
+  }
+  moveEntityButton.addEventListener('click', () => {
+    if (!selected || entityMove) return;
+    const { x, y } = graph.getElementById(ids.get(selected)!).position();
+    entityMove = { name: selected, x, y };
+    moveEntityButton.setAttribute('aria-pressed', 'true');
+    moveEntityButton.textContent = 'Moving Entity';
+    entityMoveInstructions.hidden = false;
+    announcement.textContent = `Moving Entity ${selected}. Use arrow keys, Enter to finish, or Escape to cancel.`;
+  });
+  moveEntityButton.addEventListener('keydown', (event) => {
+    if (!entityMove) return;
+    const delta: Record<string, [number, number]> = {
+      ArrowLeft: [-10, 0],
+      ArrowRight: [10, 0],
+      ArrowUp: [0, -10],
+      ArrowDown: [0, 10],
+    };
+    if (delta[event.key]) {
+      event.preventDefault();
+      const node = graph.getElementById(ids.get(entityMove.name)!);
+      const { x, y } = node.position();
+      node.position({ x: x + delta[event.key][0] / graph.zoom(), y: y + delta[event.key][1] / graph.zoom() });
+    } else if (event.key === 'Enter' || event.key === 'Escape') {
+      event.preventDefault();
+      finishEntityMove(event.key === 'Escape');
+    }
+  });
+  moveEntityButton.addEventListener('blur', () => finishEntityMove(true));
   (document.getElementById('close-inspector') as HTMLButtonElement).addEventListener('click', () => {
     if (!inspection.canChangeSelection()) return;
     clearTimeout(dismissTimer);
@@ -521,6 +591,7 @@ export function showGraph(
   views.hidden = false;
   updateView(false);
   function selectEntity(name: string) {
+    finishEntityMove(true);
     if (hasOtherEntityDraft()) {
       resolveSelectionDraft(name);
       return false;
@@ -544,7 +615,8 @@ export function showGraph(
     updateView(clearFilter || view !== 'all');
     inspection.showEntity(name);
     displayedName = name;
-    (document.getElementById('inspection-announcement') as HTMLElement).textContent = `Entity ${name} selected.`;
+    moveEntityButton.hidden = false;
+    announcement.textContent = `Entity ${name} selected.`;
     card.hidden = false;
     persistent = true;
     if (!moved) positionCard(name);
@@ -631,6 +703,31 @@ export function showGraph(
       renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 },
     });
   }
+  const graphContainer = document.getElementById('graph') as HTMLElement;
+  graphContainer.addEventListener('keydown', (event) => {
+    if (
+      event.target !== graphContainer ||
+      keyboardStart ||
+      entityMove ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    )
+      return;
+    const pan: Record<string, [number, number]> = {
+      ArrowLeft: [40, 0],
+      ArrowRight: [-40, 0],
+      ArrowUp: [0, 40],
+      ArrowDown: [0, -40],
+    };
+    if (pan[event.key]) {
+      event.preventDefault();
+      graph.panBy({ x: pan[event.key][0], y: pan[event.key][1] });
+    } else if (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      zoom(event.key === '+' || event.key === '=' ? 1.25 : 1 / 1.25);
+    }
+  });
   (document.getElementById('zoom-in') as HTMLButtonElement).addEventListener('click', () => zoom(1.25));
   (document.getElementById('zoom-out') as HTMLButtonElement).addEventListener('click', () => zoom(1 / 1.25));
   const initialName = selectedName || cardState?.name;
