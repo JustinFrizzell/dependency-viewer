@@ -140,12 +140,21 @@
       </details>
     </section>
     <main>
-      <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
+      <div
+        id="graph"
+        role="region"
+        tabindex="0"
+        aria-label="Directed Entity dependency graph"
+        aria-describedby="graph-instructions graph-summary"
+      ></div>
       <div id="graph-entities" aria-label="Graph Entities"></div>
       <p id="status" role="status"></p>
       <p id="graph-count" role="status"></p>
       <p id="graph-filter-status" role="status"></p>
       <p id="inspection-announcement" class="visually-hidden" role="status"></p>
+      <p id="graph-instructions" class="visually-hidden">
+        Use arrow keys to pan and plus or minus to zoom. Relationship arrows point from a dependency to its dependent.
+      </p>
       <div id="graph-summary" class="visually-hidden"></div>
       <div class="workspace-toolbar">
         <details id="entity-list" hidden>
@@ -215,12 +224,14 @@
         <button id="fit" type="button">Reset to fit</button>
         <button id="edge-motion" type="button">Pause</button>
       </div>
-      <section id="inspector" role="region" aria-label="Entity details" hidden>
+      <section id="inspector" role="region" tabindex="-1" aria-label="Entity details" hidden>
         <div class="inspector-header">
           <strong>Entity details</strong>
           <button id="move-inspector" type="button">Move card</button>
+          <button id="move-entity" type="button" aria-describedby="entity-move-instructions" hidden>Move Entity</button>
           <button id="close-inspector" type="button" aria-label="Close Entity details">×</button>
         </div>
+        <p id="entity-move-instructions" hidden>Use arrow keys to move, Enter to finish, or Escape to cancel.</p>
         <div id="selection-status">No entity selected. Select an entity to inspect its details.</div>
       </section>
     </main>

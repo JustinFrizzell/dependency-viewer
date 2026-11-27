@@ -1310,3 +1310,192 @@ test('hover updates a moved card without announcing each inspection', async () =
     await browser.close();
   }
 });
+
+test('canvas keyboard navigation pans and zooms without intercepting text entry offline', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true, viewport: { width: 1200, height: 900 } });
+    const requests = trackExternalRequests(page);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"Alpha","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    const node = page.getByRole('button', { name: 'Inspect Entity Alpha' });
+    const before = await node.boundingBox();
+    await page.locator('#graph').focus();
+    assert.equal(await page.locator('#graph').evaluate((element) => document.activeElement === element), true);
+    await page.keyboard.press('ArrowRight');
+    const after = await node.boundingBox();
+    assert.notEqual(after!.x, before!.x);
+    const zoom = await page.locator('#zoom-level').textContent();
+    await page.keyboard.press('-');
+    assert.notEqual(await page.locator('#zoom-level').textContent(), zoom);
+    await page.keyboard.press('+');
+    assert.equal(await page.locator('#zoom-level').textContent(), zoom);
+    await openFind(page);
+    const search = page.locator('#entity-search');
+    await search.fill('Al');
+    await search.press('ArrowLeft');
+    await search.press('+');
+    assert.equal(await search.inputValue(), 'A+l');
+    assert.equal(await page.locator('#zoom-level').textContent(), zoom);
+    assert.deepEqual(requests, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('moving an Entity by keyboard is transient in View and Edit and can be cancelled', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({
+      offline: true,
+      acceptDownloads: true,
+      viewport: { width: 1200, height: 900 },
+    });
+    const original = '{"entities":[{"name":"A","dependencies":["Missing"],"extra":42}]}';
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill(original);
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    const node = page.getByRole('button', { name: 'Inspect Entity A', exact: true });
+    const before = await node.boundingBox();
+    const move = page.getByRole('button', { name: 'Move Entity', exact: true });
+    await move.click();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    const moved = await node.boundingBox();
+    assert.ok(before && moved && moved.x > before.x);
+    assert.match((await page.locator('#inspection-announcement').textContent())!, /moved/i);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await move.click();
+    await page.keyboard.press('ArrowDown');
+    assert.notEqual((await node.boundingBox())!.y, moved.y);
+    await page.keyboard.press('Escape');
+    assert.deepEqual(await node.boundingBox(), moved);
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    assert.equal(await page.locator('#undo-document').isDisabled(), true);
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), JSON.parse(original));
+    await page.locator('#toggle-file-panel').click();
+    const download = page.waitForEvent('download');
+    await page.locator('#file-download-document').click();
+    const chunks: Buffer[] = [];
+    for await (const chunk of await (await download).createReadStream()) chunks.push(chunk);
+    assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), JSON.parse(original));
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Find and related Entity links center offscreen documented and undocumented Entities by keyboard', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true, viewport: { width: 1200, height: 900 } });
+    const requests = trackExternalRequests(page);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"model.Alpha","dependencies":["source.Missing"]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#graph').focus();
+    for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowRight');
+    await openFind(page);
+    await page.locator('#entity-search').fill('alpha');
+    const result = page.getByRole('button', { name: 'model.Alpha', exact: true });
+    await result.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'model.Alpha');
+    const graph = (await page.locator('#graph').boundingBox())!;
+    const centered = async (label: string) => {
+      const node = (await page.getByRole('button', { name: label, exact: true }).boundingBox())!;
+      assert.ok(Math.abs(node.x + node.width / 2 - (graph.x + graph.width / 2)) < 2);
+      assert.ok(Math.abs(node.y + node.height / 2 - (graph.y + graph.height / 2)) < 2);
+    };
+    await centered('Inspect Entity model.Alpha');
+    const related = page.locator('#inspector').getByRole('button', { name: 'source.Missing (undocumented)' });
+    await related.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'source.Missing');
+    await centered('Inspect Entity source.Missing (undocumented)');
+    await page.getByRole('button', { name: 'Move Entity', exact: true }).click();
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Enter');
+    assert.match((await page.locator('#inspection-announcement').textContent())!, /source.Missing moved/);
+    await page.locator('#entity-search').fill('missing');
+    const missing = page.getByRole('button', { name: 'source.Missing (undocumented)', exact: true });
+    await missing.focus();
+    await page.keyboard.press('Enter');
+    await centered('Inspect Entity source.Missing (undocumented)');
+    await page.getByRole('button', { name: 'Close Entity details' }).click();
+    assert.equal(await missing.evaluate((element) => element === document.activeElement), true);
+    assert.deepEqual(requests, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('moving an Entity preserves unsaved Document changes and does not add undo history', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#edit-entity-description').fill('Changed');
+    await page.locator('#edit-entity-form button[type=submit]').click();
+    const changed = await page.locator('#document-json').inputValue();
+    assert.match((await page.locator('#unsaved-indicator').textContent())!, /Unsaved/);
+    await page.getByRole('button', { name: 'Move Entity', exact: true }).click();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#document-json').inputValue(), changed);
+    assert.match((await page.locator('#unsaved-indicator').textContent())!, /Unsaved/);
+    await page.locator('#undo-document').click();
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    assert.equal(await page.locator('#undo-document').isDisabled(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('narrow touch layout keeps navigation and form editing reachable without dragging', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ offline: true, viewport: { width: 390, height: 844 }, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').tap();
+    await page.locator('#mode-edit').tap();
+    for (const selector of [
+      '#entity-list summary',
+      '#zoom-in',
+      '#zoom-out',
+      '#fit',
+      '#edge-motion',
+      '#add-entity-panel summary',
+    ]) {
+      const box = await page.locator(selector).boundingBox();
+      assert.ok(box && box.x >= 0 && box.x + box.width <= 390 && box.y >= 0 && box.y + box.height <= 844, selector);
+    }
+    await page.locator('#add-entity-panel summary').tap();
+    await page.locator('#new-entity-name').fill('Touch Entity');
+    await page.locator('#add-entity-form button[type=submit]').tap();
+    assert.match((await page.locator('#graph-summary').textContent())!, /Touch Entity/);
+    const card = page.locator('#inspector');
+    assert.equal(await card.isVisible(), true);
+    for (const selector of ['#move-inspector', '#move-entity', '#close-inspector']) {
+      const box = await page.locator(selector).boundingBox();
+      assert.ok(box && box.x >= 0 && box.x + box.width <= 390, selector);
+    }
+    await page.locator('#move-entity').tap();
+    const moving = (await page.locator('#move-entity').boundingBox())!;
+    assert.ok(moving.x >= 0 && moving.x + moving.width <= 390, 'active movement control');
+    await page.keyboard.press('Escape');
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
