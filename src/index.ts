@@ -158,6 +158,16 @@ function renderGraph(graph: Graph, selectedName?: string, preserveCard = false) 
       resolutionError.textContent = '';
       showDraftResolution(name);
     },
+    hasOtherEntityDraft: () => hasMetadataDraft() || hasNewEntityDraft(),
+    createEntityAt: (x, y) => {
+      const panel = document.getElementById('add-entity-panel') as HTMLDetailsElement;
+      const surface = panel.querySelector<HTMLElement>('.floating-content')!;
+      panel.open = true;
+      surface.style.width = 'min(320px, calc(100vw - 24px))';
+      surface.style.left = `${Math.max(12, Math.min(x, window.innerWidth - surface.offsetWidth - 12))}px`;
+      surface.style.top = `${Math.max(12, Math.min(y, window.innerHeight - surface.offsetHeight - 12))}px`;
+      (document.getElementById('new-entity-name') as HTMLInputElement).focus();
+    },
     editProperties: (name) => {
       metadataEntity.value = name;
       resetMetadataProperties();
@@ -427,6 +437,13 @@ for (const input of [metadataKey, metadataValue]) {
   const panel = document.getElementById('colour-settings') as HTMLDetailsElement;
   panel.open = true;
   panel.querySelector('summary')!.focus();
+});
+
+(document.querySelector('#add-entity-panel summary') as HTMLElement).addEventListener('click', () => {
+  const surface = document.querySelector<HTMLElement>('#add-entity-panel .floating-content')!;
+  surface.style.removeProperty('width');
+  surface.style.removeProperty('left');
+  surface.style.removeProperty('top');
 });
 
 (document.getElementById('add-entity-form') as HTMLFormElement).addEventListener('submit', (event) => {

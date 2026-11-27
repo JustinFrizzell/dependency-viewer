@@ -20,6 +20,8 @@ type GraphOptions = {
   refreshDocument: (selectedName?: string) => void;
   resolveSelectionDraft: (name: string) => void;
   editProperties: (name: string) => void;
+  createEntityAt: (x: number, y: number) => void;
+  hasOtherEntityDraft: () => boolean;
   cardState?: { name: string; left: number; top: number };
 };
 
@@ -35,6 +37,8 @@ export function showGraph(
     refreshDocument,
     resolveSelectionDraft,
     editProperties,
+    createEntityAt,
+    hasOtherEntityDraft,
     cardState,
   }: GraphOptions,
 ) {
@@ -228,7 +232,7 @@ export function showGraph(
     card.style.top = `${Math.max(0, Math.min(graph.height() - card.offsetHeight, top))}px`;
   }
   function inspectAutomatically(name: string) {
-    if (inspection.hasEntityDraft() || inspection.hasDependencyDraft()) return;
+    if (inspection.hasEntityDraft() || inspection.hasDependencyDraft() || hasOtherEntityDraft()) return;
     inspection.showEntity(name);
     displayedName = name;
     card.hidden = false;
@@ -517,6 +521,10 @@ export function showGraph(
   views.hidden = false;
   updateView(false);
   function selectEntity(name: string) {
+    if (hasOtherEntityDraft()) {
+      resolveSelectionDraft(name);
+      return false;
+    }
     if (displayedName === name && (inspection.hasEntityDraft() || inspection.hasDependencyDraft())) {
       card.hidden = false;
       persistent = true;
@@ -543,6 +551,46 @@ export function showGraph(
     return true;
   }
   graph.on('tap', 'node', (event) => selectEntity(event.target.data('name')));
+  let canvasPress: { x: number; y: number; moved: boolean } | null = null;
+  const trackMouse = (event: MouseEvent) => {
+    if (canvasPress && Math.hypot(event.clientX - canvasPress.x, event.clientY - canvasPress.y) > 5)
+      canvasPress.moved = true;
+  };
+  const cancelCanvasPress = () => {
+    canvasPress = null;
+  };
+  const cancelCanvasPressOnEscape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') cancelCanvasPress();
+  };
+  window.addEventListener('mousemove', trackMouse);
+  window.addEventListener('blur', cancelCanvasPress);
+  window.addEventListener('pointercancel', cancelCanvasPress);
+  window.addEventListener('keydown', cancelCanvasPressOnEscape);
+  graph.on('mousedown', (event) => {
+    const original = event.originalEvent as MouseEvent;
+    if (
+      document.body.dataset.mode === 'edit' &&
+      event.target === graph &&
+      original.type === 'mousedown' &&
+      original.button === 0
+    )
+      canvasPress = { x: original.clientX, y: original.clientY, moved: false };
+  });
+  graph.on('mouseup', (event) => {
+    const original = event.originalEvent as MouseEvent;
+    trackMouse(original);
+    if (
+      canvasPress &&
+      !canvasPress.moved &&
+      event.target === graph &&
+      original.type === 'mouseup' &&
+      original.button === 0 &&
+      document.body.dataset.mode === 'edit'
+    )
+      createEntityAt(original.clientX, original.clientY);
+    cancelCanvasPress();
+  });
+  window.addEventListener('mouseup', cancelCanvasPress);
   graph.on('mouseover', 'node', (event) => {
     if (!tooltipsEnabled() || (!moved && persistent)) return;
     clearTimeout(dismissTimer);
@@ -611,6 +659,11 @@ export function showGraph(
       window.removeEventListener('pointercancel', cancelConnection);
       window.removeEventListener('blur', cancelConnection);
       window.removeEventListener('keydown', cancelOnEscape);
+      window.removeEventListener('mousemove', trackMouse);
+      window.removeEventListener('mouseup', cancelCanvasPress);
+      window.removeEventListener('blur', cancelCanvasPress);
+      window.removeEventListener('pointercancel', cancelCanvasPress);
+      window.removeEventListener('keydown', cancelCanvasPressOnEscape);
       stopEdgeMotion();
       imageExport.cleanup();
       graph.destroy();
