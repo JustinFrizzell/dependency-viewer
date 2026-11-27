@@ -180,6 +180,12 @@ test('reads an actual browser File and ignores stale asynchronous reads', async 
     readers[2].onerror();
     assert.match((document.getElementById('file-error') as HTMLElement).textContent, /could not read/i);
     assert.match((document.getElementById('graph-summary') as HTMLElement).textContent, /new/);
+    loadFile(dom, '', 'pending.json');
+    Object.defineProperty(input, 'files', { configurable: true, value: [] });
+    input.dispatchEvent(new dom.window.Event('change'));
+    readers[3].result = '{"entities":[{"name":"pending","dependencies":[]}]}';
+    readers[3].onload();
+    assert.match((document.getElementById('graph-summary') as HTMLElement).textContent, /new/);
   } finally {
     dom.window.close();
   }
@@ -2312,6 +2318,7 @@ test('property drafts block Entity edits and settings changes', () => {
   const dom = open(dataset({ entities: [{ name: 'A', dependencies: [] }] }));
   try {
     const { document, Event } = dom.window;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     (document.querySelector('#entity-results button[title="A"]') as HTMLButtonElement).click();
     (document.getElementById('metadata-value') as HTMLTextAreaElement).value = '{';
     (document.getElementById('metadata-value') as HTMLTextAreaElement).dispatchEvent(new Event('input'));
@@ -2379,6 +2386,7 @@ test('appearance and tooltip preferences are Document edits restored on reopen a
   const dom = open(dataset({ entities: [{ name: 'one', description: 'detail', dependencies: [] }] }));
   try {
     const document = dom.window.document;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     (document.getElementById('settings-entry') as HTMLButtonElement).click();
     (document.getElementById('compact-nodes') as HTMLInputElement).click();
     (document.getElementById('tooltips-enabled') as HTMLInputElement).click();
@@ -2400,6 +2408,7 @@ test('appearance and tooltip preferences are Document edits restored on reopen a
     loadFile(dom, saved);
     assert.equal((document.getElementById('compact-nodes') as HTMLInputElement).checked, true);
     assert.equal((document.getElementById('tooltips-enabled') as HTMLInputElement).checked, false);
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     (document.getElementById('reset-presentation') as HTMLButtonElement).click();
     assert.equal(JSON.parse(editor.value).settings, undefined);
   } finally {
@@ -2411,6 +2420,7 @@ test('presentation settings protect drafts and conflicting existing JSON', () =>
   const dom = open(dataset({ entities: [], settings: { other: 7 } }));
   try {
     const document = dom.window.document;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     const editor = document.getElementById('document-json') as HTMLTextAreaElement;
     editor.value += ' ';
     editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
@@ -2486,6 +2496,7 @@ test('colour priority and reset participate in history without persisting view s
   const dom = open({ raw: '{"entities":[{"name":"bronze.gold","dependencies":[]}],"settings":{"other":42}}' });
   try {
     const { document, Event } = dom.window;
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     const editor = document.getElementById('document-json') as HTMLTextAreaElement;
     const json = () => JSON.parse(editor.value);
     (document.querySelector('#entity-results button') as HTMLButtonElement).click();
@@ -2539,6 +2550,7 @@ test('downloaded colour overrides reload offline and undo returns to the saved s
     (document.getElementById('paste-json') as HTMLTextAreaElement).value =
       '{"entities":[{"name":"gold","dependencies":[]}]}';
     (document.getElementById('open-paste') as HTMLButtonElement).click();
+    (document.getElementById('mode-edit') as HTMLButtonElement).click();
     let blob!: Blob;
     let copied!: string;
     dom.window.URL.createObjectURL = (value) => {

@@ -17,6 +17,185 @@ function trackExternalRequests(page: Page) {
   return requests;
 }
 
+test('opens in View and enables Document editing only in Edit', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#document-panel summary').click();
+    await page.locator('#entity-results button[title="A"]').click();
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#document-json').isEditable(), false);
+    assert.equal(await page.locator('#edit-entity-form').isVisible(), false);
+    assert.equal(await page.locator('#compact-nodes').isDisabled(), true);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    assert.equal(await page.locator('#document-json').isEditable(), true);
+    assert.equal(await page.locator('#edit-entity-form').isVisible(), true);
+    assert.equal(await page.locator('#compact-nodes').isEnabled(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('resolves JSON drafts before leaving Edit without saving', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#document-panel summary').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#document-json').fill('{invalid');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply JSON draft' }).click();
+    assert.match((await page.locator('#document-error').textContent())!, /error/i);
+    assert.equal(await page.getByRole('button', { name: 'Edit', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: 'Stay in Edit' }).click();
+    assert.equal(await page.locator('#document-json').inputValue(), '{invalid');
+    await page.locator('#document-json').fill('{"entities":[{"name":"B","dependencies":[]}]}');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply JSON draft' }).click();
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.match((await page.locator('#graph-summary').textContent())!, /B/);
+    assert.match((await page.locator('#unsaved-indicator').textContent())!, /unsaved/i);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#document-json').fill('{invalid');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Discard JSON draft' }).click();
+    assert.match(await page.locator('#document-json').inputValue(), /"B"/);
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('resolves contextual drafts and protects invalid drafts when switching modes', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#edit-entity-name').fill('B');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply Entity draft' }).click();
+    assert.match((await page.locator('#draft-resolution-error').textContent())!, /exists|already|collision/i);
+    assert.equal(await page.locator('#edit-entity-name').inputValue(), 'B');
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Discard Entity draft' }).click();
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#new-dependency-name').fill('B');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply Direct dependency draft' }).click();
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.match(await page.locator('#document-json').inputValue(), /"B"/);
+    assert.match((await page.locator('#unsaved-indicator').textContent())!, /unsaved/i);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('resolves property and new Entity drafts without merging conflicting work', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#metadata-panel summary').click();
+    await page.locator('#metadata-key').fill('owner');
+    await page.locator('#metadata-value').fill('"team"');
+    await page.locator('#add-entity-panel summary').click();
+    await page.locator('#new-entity-name').fill('B');
+    await page.getByRole('button', { name: 'View', exact: true }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply property draft' }).click();
+    assert.match((await page.locator('#draft-resolution-error').textContent())!, /conflicting drafts/i);
+    assert.equal(await page.locator('#new-entity-name').inputValue(), 'B');
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Discard new Entity draft' }).click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply property draft' }).click();
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+    const current = JSON.parse(await page.locator('#document-json').inputValue());
+    assert.deepEqual(current.entities, [{ name: 'A', dependencies: [], owner: 'team' }]);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('preserves work on failed opens and resets mode, history and navigation on reopening', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ acceptDownloads: true });
+    await page.goto(viewer);
+    const file = {
+      name: 'same.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from('{"entities":[{"name":"A","dependencies":[]}]}'),
+    };
+    await page.locator('#dependency-file').setInputFiles(file);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#document-panel summary').click();
+    await page.locator('#document-json').fill('{"entities":[{"name":"B","dependencies":[]}]}');
+    await page.locator('#apply-document').click();
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
+    await page.locator('#copy-document').click();
+    assert.match((await page.locator('#document-status').textContent())!, /select and copy/i);
+    assert.match((await page.locator('#unsaved-indicator').textContent())!, /unsaved/i);
+    const download = page.waitForEvent('download');
+    await page.locator('#download-document').click();
+    await download;
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    await page.locator('#document-json').fill('{"entities":[{"name":"C","dependencies":[]}]}');
+    await page.locator('#apply-document').click();
+    await page.locator('#undo-document').click();
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    await page.locator('#graph-filter').fill('B');
+    await page.locator('#document-json').fill('{invalid draft');
+    await page.locator('#toggle-file-panel').click();
+    await page.locator('#paste-json').fill('{invalid document');
+    await page.locator('#open-paste').click();
+    assert.match((await page.locator('#file-error').textContent())!, /error/i);
+    await page.locator('#dependency-file').setInputFiles([]);
+    await page.locator('#paste-json').fill('{"entities":[]}');
+    page.once('dialog', (dialog) => void dialog.dismiss());
+    await page.locator('#open-paste').click();
+    assert.equal(await page.locator('#document-json').inputValue(), '{invalid draft');
+    assert.equal(await page.getByRole('button', { name: 'Edit', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.evaluate(() => {
+      const Original = window.FileReader;
+      window.FileReader = class extends Original {
+        override readAsText() {
+          window.FileReader = Original;
+          this.dispatchEvent(new ProgressEvent('error'));
+        }
+      };
+    });
+    await page.locator('#dependency-file').setInputFiles(file);
+    assert.match((await page.locator('#file-error').textContent())!, /could not read/i);
+    assert.equal(await page.locator('#document-json').inputValue(), '{invalid draft');
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.locator('#dependency-file').setInputFiles(file);
+    await page.waitForFunction(() => document.getElementById('file-error')!.textContent === '');
+    assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#graph-filter').inputValue(), '');
+    assert.equal(await page.locator('#document-panel').evaluate((panel: HTMLDetailsElement) => panel.open), false);
+    assert.match(await page.locator('#document-json').inputValue(), /"A"/);
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    assert.equal(await page.locator('#undo-document').isDisabled(), true);
+    assert.equal(await page.locator('#redo-document').isDisabled(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('opens a pasted Document in the standalone viewer offline', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -54,6 +233,7 @@ test('edits and downloads a Document that can be uploaded offline with metadata 
       buffer: Buffer.from(JSON.stringify(original)),
     });
 
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.locator('#entity-results button[title="Source"]').click();
     await page.locator('#edit-entity-name').fill('Renamed');
     await page.locator('#edit-entity-description').fill('Updated');
@@ -100,6 +280,7 @@ test('keeps form drafts visible and blocks download and selection until resolved
       .locator('#paste-json')
       .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
     await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.locator('#entity-results button[title="A"]').click();
     await page.locator('#edit-entity-name').fill('B');
     assert.equal(await page.locator('#download-document').isDisabled(), true);
@@ -129,6 +310,7 @@ test('protects invalid drafts and unsaved changes while supporting undo and redo
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.locator('#document-panel summary').click();
     await page.locator('#document-json').fill('{"entities":[{"name":"B","dependencies":[]}]}');
     await page.locator('#entity-results button[title="A"]').click();

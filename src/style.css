@@ -32,6 +32,18 @@ h1 {
 header span {
   color: #b7d4da;
 }
+header [aria-pressed='true'],
+header [aria-pressed='true']:hover {
+  background: #087c72;
+  color: white;
+  border-color: #087c72;
+}
+#document-settings-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
 .file-panel:not([hidden]) {
   flex: none;
   display: flex;
@@ -515,6 +527,13 @@ footer p {
   border-radius: 4px;
 }
 @media (max-width: 600px) {
+  header {
+    gap: 8px;
+    padding: 0 12px;
+  }
+  header > span {
+    display: none;
+  }
   .inspector-details {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -533,4 +552,7 @@ footer p {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+body[data-mode='view'] .edit-only {
+  display: none;
 }
