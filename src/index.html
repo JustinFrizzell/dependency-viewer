@@ -10,6 +10,13 @@
     <title>Dependency viewer</title>
   </head>
   <body data-mode="view">
+    <button id="toggle-controls" type="button" aria-expanded="false" aria-label="Show workspace controls" hidden>
+      ☰ Controls
+    </button>
+    <aside id="small-screen-notice" role="status" hidden>
+      This screen is small; some workspace controls are collapsed.
+      <button id="dismiss-small-screen" type="button" aria-label="Dismiss small screen notice">×</button>
+    </aside>
     <header>
       <h1>Dependency viewer</h1>
       <span id="document-name">No Document</span><span id="unsaved-indicator"></span>

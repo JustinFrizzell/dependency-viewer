@@ -68,7 +68,7 @@ export function showGraph(
   const elements: cytoscape.ElementDefinition[] = [
     ...data.entities.map((entity) => ({
       data: { id: ids.get(entity.name)!, name: entity.name, label: nameParts(entity.name).short },
-      classes: entity.documented ? '' : 'undocumented',
+      classes: `${entity.documented ? '' : 'undocumented'} ${nameParts(entity.name).prefix ? 'has-prefix' : ''}`,
     })),
     ...data.edges.map((edge, index) => ({
       data: { id: `edge-${index}`, source: ids.get(edge.source)!, target: ids.get(edge.target)! },
@@ -86,20 +86,22 @@ export function showGraph(
       style: {
         label: 'data(label)',
         shape: 'round-rectangle',
-        width: compact ? 150 : 200,
-        height: compact ? 40 : 54,
-        'background-color': dark ? '#253d48' : '#ffffff',
+        width: compact ? 150 : 182,
+        height: compact ? 46 : 64,
+        'background-color': dark ? '#191c24' : '#ffffff',
         'border-color': dark ? '#a6c1c7' : '#607d87',
         'border-width': 2,
         color: dark ? '#edf5f5' : '#172b3a',
         'font-size': 13,
         'font-weight': 600,
         'text-wrap': 'ellipsis',
-        'text-max-width': (compact ? 130 : 180) as unknown as string,
+        'text-max-width': (compact ? 95 : 125) as unknown as string,
+        'text-margin-x': 20,
         'text-halign': 'center',
         'text-valign': 'center',
       },
     },
+    { selector: 'node.has-prefix', style: { 'text-margin-y': -8 } },
     {
       selector: 'node.undocumented',
       style: {
@@ -140,6 +142,10 @@ export function showGraph(
       animate: false,
     } as dagre.DagreLayoutOptions,
   });
+  if (!layoutState && graph.zoom() > 1) {
+    graph.zoom(1);
+    graph.center();
+  }
   const applyGraphTheme = () =>
     graph
       .style()
@@ -149,9 +155,15 @@ export function showGraph(
   setupDocumentSettings(graph);
   const imageExport = setupImageExport(window, document, graph, (options) => {
     graph.style().fromJson(graphStyles(false)).update();
+    const qualified = graph.nodes('.has-prefix');
+    qualified.forEach((node) => {
+      const { short, prefix } = nameParts(node.data('name'));
+      node.style({ label: `${short}\n${prefix}`, 'text-wrap': 'wrap', 'text-margin-y': 0 });
+    });
     try {
       return graph.png(options);
     } finally {
+      qualified.removeStyle('label text-wrap text-margin-y');
       applyGraphTheme();
     }
   });
@@ -252,6 +264,7 @@ export function showGraph(
     if (
       keyboardStart ||
       entityMove ||
+      card.classList.contains('editor-open') ||
       inspection.hasEntityDraft() ||
       inspection.hasDependencyDraft() ||
       hasOtherEntityDraft()
@@ -393,6 +406,7 @@ export function showGraph(
   const viewButtons = [...views.querySelectorAll<HTMLButtonElement>('[data-view]')];
   const graphEntities = document.getElementById('graph-entities') as HTMLElement;
   const entityButtons = new Map<string, HTMLButtonElement>();
+  const decorations = new Map<string, HTMLElement>();
   const handles = new Map<string, { source: HTMLButtonElement; target: HTMLButtonElement }>();
   const connectionStatus = document.getElementById('connection-status') as HTMLElement;
   const relationshipActions = document.getElementById('relationship-actions') as HTMLElement;
@@ -469,6 +483,18 @@ export function showGraph(
   window.addEventListener('blur', cancelConnection);
   window.addEventListener('keydown', cancelOnEscape);
   for (const entity of data.entities) {
+    const decoration = document.createElement('div');
+    decoration.className = 'graph-entity-decoration';
+    const icon = document.createElement('span');
+    icon.className = 'graph-entity-icon';
+    icon.textContent = '▦';
+    const prefix = document.createElement('span');
+    prefix.className = 'graph-entity-prefix';
+    prefix.textContent = nameParts(entity.name).prefix;
+    decoration.append(icon, prefix);
+    decoration.setAttribute('aria-hidden', 'true');
+    graphEntities.appendChild(decoration);
+    decorations.set(entity.name, decoration);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'graph-entity';
@@ -509,6 +535,13 @@ export function showGraph(
       const position = node.renderedPosition();
       button.style.left = `${position.x}px`;
       button.style.top = `${position.y}px`;
+      const decoration = decorations.get(name)!;
+      decoration.style.left = `${position.x}px`;
+      decoration.style.top = `${position.y}px`;
+      decoration.style.width = `${node.width()}px`;
+      decoration.style.height = `${node.height()}px`;
+      decoration.style.transform = `translate(-50%, -50%) scale(${graph.zoom()})`;
+      decoration.style.color = node.style('color');
       const pair = handles.get(name)!;
       pair.source.style.left = `${position.x + node.renderedWidth() / 2}px`;
       pair.target.style.left = `${position.x - node.renderedWidth() / 2}px`;
@@ -518,8 +551,18 @@ export function showGraph(
   }
   graph.on('pan zoom resize', positionEntityButtons);
   graph.on('position', 'node', positionEntityButtons);
+  graph.on('style', 'node', (event) => {
+    const node = event.target as cytoscape.NodeSingular;
+    const decoration = decorations.get(node.data('name'));
+    if (decoration) {
+      decoration.style.width = `${node.width()}px`;
+      decoration.style.height = `${node.height()}px`;
+      decoration.style.color = node.style('color');
+    }
+  });
   positionEntityButtons();
   let selected: string | null = null;
+  let initializingSelection = true;
   let view: string | undefined = 'all';
   const filterQuery = () => graphFilter.value.trim().toLowerCase();
   function reachable(start: string, neighbors: (name: string) => string[]) {
@@ -551,6 +594,7 @@ export function showGraph(
     graph.nodes().forEach((node) => {
       node.toggleClass('filtered-out', !visible.has(node.data('name')));
       entityButtons.get(node.data('name'))!.hidden = !visible.has(node.data('name'));
+      decorations.get(node.data('name'))!.hidden = !visible.has(node.data('name'));
       const pair = handles.get(node.data('name'))!;
       pair.source.hidden = pair.target.hidden = !visible.has(node.data('name'));
     });
@@ -615,6 +659,7 @@ export function showGraph(
       resolveSelectionDraft(name);
       return false;
     }
+    if (!initializingSelection) (document.getElementById('document-panel') as HTMLDetailsElement).open = false;
     if (trigger) invokingControl = trigger;
     else if (document.activeElement instanceof HTMLElement && !card.contains(document.activeElement))
       invokingControl = document.activeElement;
@@ -706,7 +751,13 @@ export function showGraph(
   );
   (document.getElementById('fit') as HTMLButtonElement).addEventListener('click', () => {
     const visible = graph.elements().not('.filtered-out');
-    if (visible.length) graph.fit(visible, 45);
+    if (visible.length) {
+      graph.fit(visible, 45);
+      if (graph.zoom() > 1) {
+        graph.zoom(1);
+        graph.center(visible);
+      }
+    }
   });
   function zoom(factor: number) {
     graph.zoom({
@@ -746,6 +797,7 @@ export function showGraph(
     (!selectEditedEntity && previousSelection && entities.has(previousSelection) ? previousSelection : selectedName) ||
     cardState?.name;
   if (initialName && entities.has(initialName)) selectEntity(initialName);
+  initializingSelection = false;
   if (navigationState) {
     graphFilter.value = navigationState.filter;
     view = selected ? navigationState.view : 'all';
