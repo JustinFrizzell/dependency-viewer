@@ -20,9 +20,16 @@ type GraphOptions = {
   refreshDocument: (selectedName?: string) => void;
   resolveSelectionDraft: (name: string) => void;
   editProperties: (name: string) => void;
-  createEntityAt: (x: number, y: number) => void;
+  createEntityAt: (x: number, y: number, position: cytoscape.Position) => void;
   hasOtherEntityDraft: () => boolean;
   cardState?: { name: string; left: number; top: number };
+  navigationState?: { selected: string | null; view: string | undefined; filter: string };
+  selectEditedEntity?: boolean;
+  layoutState?: {
+    positions: Map<string, cytoscape.Position>;
+    zoom: number;
+    pan: cytoscape.Position;
+  };
 };
 
 export function showGraph(
@@ -40,6 +47,9 @@ export function showGraph(
     createEntityAt,
     hasOtherEntityDraft,
     cardState,
+    navigationState,
+    layoutState,
+    selectEditedEntity,
   }: GraphOptions,
 ) {
   const summary = document.getElementById('graph-summary') as HTMLElement;
@@ -191,20 +201,18 @@ export function showGraph(
       button.addEventListener('click', () => {
         if (!selectEntity(entity.name)) return;
         const node = graph.getElementById(ids.get(entity.name)!);
-        if (view !== 'all') {
-          const bounds = graph.elements().not('.filtered-out').boundingBox();
-          const { x, y } = node.position();
-          const padding = Math.min(45, graph.width() / 4, graph.height() / 4);
-          const halfWidth = Math.max(x - bounds.x1, bounds.x2 - x);
-          const halfHeight = Math.max(y - bounds.y1, bounds.y2 - y);
-          const zoom = Math.min(
-            graph.zoom(),
-            (graph.width() / 2 - padding) / halfWidth,
-            (graph.height() / 2 - padding) / halfHeight,
-          );
-          graph.minZoom(Math.min(graph.minZoom(), zoom));
-          graph.zoom(zoom);
-        }
+        const bounds = graph.elements().not('.filtered-out').boundingBox();
+        const { x, y } = node.position();
+        const padding = Math.min(45, graph.width() / 4, graph.height() / 4);
+        const halfWidth = Math.max(x - bounds.x1, bounds.x2 - x);
+        const halfHeight = Math.max(y - bounds.y1, bounds.y2 - y);
+        const zoom = Math.min(
+          graph.zoom(),
+          (graph.width() / 2 - padding) / halfWidth,
+          (graph.height() / 2 - padding) / halfHeight,
+        );
+        graph.minZoom(Math.min(graph.minZoom(), zoom));
+        graph.zoom(zoom);
         graph.center(node);
       });
       button.addEventListener('focus', () => {
@@ -659,7 +667,7 @@ export function showGraph(
       original.button === 0 &&
       document.body.dataset.mode === 'edit'
     )
-      createEntityAt(original.clientX, original.clientY);
+      createEntityAt(original.clientX, original.clientY, event.position);
     cancelCanvasPress();
   });
   window.addEventListener('mouseup', cancelCanvasPress);
@@ -730,14 +738,37 @@ export function showGraph(
   });
   (document.getElementById('zoom-in') as HTMLButtonElement).addEventListener('click', () => zoom(1.25));
   (document.getElementById('zoom-out') as HTMLButtonElement).addEventListener('click', () => zoom(1 / 1.25));
-  const initialName = selectedName || cardState?.name;
+  const previousSelection = navigationState?.selected;
+  const initialName =
+    (!selectEditedEntity && previousSelection && entities.has(previousSelection) ? previousSelection : selectedName) ||
+    cardState?.name;
   if (initialName && entities.has(initialName)) selectEntity(initialName);
+  if (navigationState) {
+    graphFilter.value = navigationState.filter;
+    view = selected ? navigationState.view : 'all';
+    updateView(true);
+  }
+  if (layoutState) {
+    graph.nodes().forEach((node) => {
+      const position = layoutState.positions.get(node.data('name'));
+      if (position) node.position(position);
+    });
+    graph.minZoom(Math.min(graph.minZoom(), layoutState.zoom));
+    graph.zoom(layoutState.zoom);
+    graph.pan(layoutState.pan);
+  }
   if (cardState && !card.hidden) {
     moved = true;
     moveCard(cardState.left, cardState.top);
   }
   return {
     inspection,
+    navigationState: () => ({ selected, view, filter: graphFilter.value }),
+    layoutState: () => ({
+      positions: new Map(graph.nodes().map((node) => [node.data('name') as string, { ...node.position() }])),
+      zoom: graph.zoom(),
+      pan: { ...graph.pan() },
+    }),
     selectEntity: (name: string) => {
       const selected = selectEntity(name);
       if (selected) graph.center(graph.getElementById(ids.get(name)!));

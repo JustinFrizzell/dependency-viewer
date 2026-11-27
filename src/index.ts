@@ -28,6 +28,9 @@ let cleanupGraph = () => {};
 let resizeGraph = () => {};
 let selectGraphEntity: (name: string) => boolean = () => false;
 let getCardState: ReturnType<typeof showGraph>['cardState'] = () => undefined;
+let getNavigationState: () => ReturnType<ReturnType<typeof showGraph>['navigationState']> | undefined = () => undefined;
+let getLayoutState: ReturnType<typeof showGraph>['layoutState'];
+let newEntityPosition: cytoscape.Position | undefined;
 let selection = 0;
 let session: DocumentSession | null = null;
 let mode: 'view' | 'edit' = 'view';
@@ -109,6 +112,7 @@ function openDocument(raw: string, name: string) {
   }
   inspection = null;
   newEntityRejected = false;
+  newEntityPosition = undefined;
   document.body.dataset.loaded = 'true';
   documentName = name;
   (document.getElementById('document-name') as HTMLElement).textContent = name;
@@ -129,8 +133,17 @@ function openDocument(raw: string, name: string) {
   updateDocumentControls();
 }
 
-function renderGraph(graph: Graph, selectedName?: string, preserveCard = false) {
+function renderGraph(
+  graph: Graph,
+  selectedName?: string,
+  preserveCard = false,
+  position?: cytoscape.Position,
+  selectEditedEntity = false,
+) {
   const cardState = preserveCard ? getCardState() : undefined;
+  const navigationState = preserveCard ? getNavigationState() : undefined;
+  const layoutState = position && selectedName ? getLayoutState() : undefined;
+  if (layoutState && position && selectedName) layoutState.positions.set(selectedName, position);
   cleanupGraph();
   inspection = null;
   toolbarObserver?.disconnect();
@@ -149,6 +162,9 @@ function renderGraph(graph: Graph, selectedName?: string, preserveCard = false) 
   const navigation = showGraph(graph, selectedName, {
     session: session!,
     cardState,
+    navigationState,
+    layoutState,
+    selectEditedEntity,
     setupDocumentSettings,
     tooltipsEnabled: () => presentationControls.tooltipsEnabled(),
     requireNoConflictingFormDraft,
@@ -159,7 +175,8 @@ function renderGraph(graph: Graph, selectedName?: string, preserveCard = false) 
       showDraftResolution(name);
     },
     hasOtherEntityDraft: () => hasMetadataDraft() || hasNewEntityDraft(),
-    createEntityAt: (x, y) => {
+    createEntityAt: (x, y, position) => {
+      newEntityPosition = { ...position };
       const panel = document.getElementById('add-entity-panel') as HTMLDetailsElement;
       const surface = panel.querySelector<HTMLElement>('.floating-content')!;
       panel.open = true;
@@ -182,6 +199,8 @@ function renderGraph(graph: Graph, selectedName?: string, preserveCard = false) 
   inspection = navigation.inspection;
   selectGraphEntity = navigation.selectEntity;
   getCardState = navigation.cardState;
+  getNavigationState = navigation.navigationState;
+  getLayoutState = navigation.layoutState;
   cleanupGraph = navigation.cleanup;
   resizeGraph = navigation.resize;
   updateDocumentControls();
@@ -341,7 +360,7 @@ function showDraftResolution(selectionName?: string) {
   showDraftResolution();
 });
 
-function refreshDocument(selectedName?: string) {
+function refreshDocument(selectedName?: string, position?: cytoscape.Position, selectEditedEntity = false) {
   resetMetadata(selectedName);
   updateDocumentControls();
   (document.getElementById('document-error') as HTMLElement).textContent = '';
@@ -350,7 +369,7 @@ function refreshDocument(selectedName?: string) {
   if (JSON.stringify(graph) === displayedGraph) {
     colourControls.update(JSON.parse(session!.current()));
     presentationControls.update(JSON.parse(session!.current()));
-  } else renderGraph(graph, selectedName, true);
+  } else renderGraph(graph, selectedName, true, position, selectEditedEntity);
 }
 
 function resetMetadata(selectedName = metadataEntity.value) {
@@ -440,6 +459,7 @@ for (const input of [metadataKey, metadataValue]) {
 });
 
 (document.querySelector('#add-entity-panel summary') as HTMLElement).addEventListener('click', () => {
+  newEntityPosition = undefined;
   const surface = document.querySelector<HTMLElement>('#add-entity-panel .floating-content')!;
   surface.style.removeProperty('width');
   surface.style.removeProperty('left');
@@ -459,7 +479,9 @@ for (const input of [metadataKey, metadataValue]) {
     (event.target as HTMLFormElement).reset();
     newEntityRejected = false;
     (document.getElementById('add-entity-error') as HTMLElement).textContent = '';
-    refreshDocument(name);
+    const position = newEntityPosition;
+    newEntityPosition = undefined;
+    refreshDocument(name, position, true);
   } catch (error) {
     if (validating) newEntityRejected = true;
     (document.getElementById('add-entity-error') as HTMLElement).textContent = `Error: ${(error as Error).message}`;
@@ -472,6 +494,7 @@ for (const input of [metadataKey, metadataValue]) {
   updateDocumentControls();
 });
 (document.getElementById('discard-new-entity-draft') as HTMLButtonElement).addEventListener('click', () => {
+  newEntityPosition = undefined;
   (document.getElementById('add-entity-form') as HTMLFormElement).reset();
   newEntityRejected = false;
   (document.getElementById('add-entity-error') as HTMLElement).textContent = '';

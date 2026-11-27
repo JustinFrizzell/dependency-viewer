@@ -90,6 +90,30 @@ test('blank canvas mouse click opens creation but panning and touch do not', asy
   }
 });
 
+test('creating an Entity on the canvas places it at the click without moving existing Entities', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"Existing","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const existing = page.getByRole('button', { name: 'Inspect Entity Existing' });
+    const before = (await existing.boundingBox())!;
+    const point = { x: 1000, y: 650 };
+    await page.mouse.click(point.x, point.y);
+    await page.locator('#new-entity-name').fill('New');
+    await page.locator('#add-entity-form button[type=submit]').click();
+    const created = (await page.getByRole('button', { name: 'Inspect Entity New' }).boundingBox())!;
+    const after = (await existing.boundingBox())!;
+    assert.ok(Math.abs(created.x + created.width / 2 - point.x) < 2);
+    assert.ok(Math.abs(created.y + created.height / 2 - point.y) < 2);
+    assert.ok(Math.abs(after.x - before.x) < 2 && Math.abs(after.y - before.y) < 2);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('renaming and removing an undocumented Entity changes references without creating a record', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -948,6 +972,48 @@ test('graph-first workspace keeps controls floating and supports an empty Docume
   }
 });
 
+test('graph edits preserve the filter and dependency view', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill(
+      JSON.stringify({
+        entities: [
+          { name: 'Alpha', dependencies: ['Alpine'] },
+          { name: 'Alpine', dependencies: [] },
+          { name: 'Other', dependencies: [] },
+        ],
+      }),
+    );
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="Alpha"]').click();
+    await page.getByRole('button', { name: 'Upstream' }).click();
+    await openFilter(page);
+    await page.locator('#graph-filter').fill('Al');
+    await page.locator('#edit-entity-description').fill('Updated');
+    await page.getByRole('button', { name: 'Apply Entity changes' }).click();
+    assert.equal(await page.locator('#graph-filter').inputValue(), 'Al');
+    assert.equal(await page.getByRole('button', { name: 'Upstream' }).getAttribute('aria-pressed'), 'true');
+    assert.match((await page.locator('#graph-count').textContent())!, /^2 Entities/);
+    await openFilter(page);
+    await page.locator('#graph-filter').fill('Alpine');
+    await page.locator('#edit-entity-description').fill('Updated again');
+    await page.getByRole('button', { name: 'Apply Entity changes' }).click();
+    assert.equal(await page.locator('#graph-filter').inputValue(), 'Alpine');
+    assert.match((await page.locator('#graph-count').textContent())!, /^1 Entity/);
+    assert.equal(await page.getByRole('button', { name: 'Upstream' }).getAttribute('aria-pressed'), 'true');
+    await openFilter(page);
+    await page.getByRole('button', { name: 'Clear graph filter' }).click();
+    assert.match((await page.locator('#graph-count').textContent())!, /^2 Entities/);
+    assert.doesNotMatch((await page.locator('#graph-summary').textContent())!, /Other/);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('Find and Filter are separate and preserve dependency view semantics', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -1571,6 +1637,30 @@ test('moving an Entity by keyboard is transient in View and Edit and can be canc
     for await (const chunk of await (await download).createReadStream()) chunks.push(chunk);
     assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), JSON.parse(original));
     assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Find centers an Entity while keeping the All view graph visible', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    await page.goto(viewer);
+    const entities = Array.from({ length: 10 }, (_, index) => ({
+      name: `Node${index}`,
+      dependencies: index ? [`Node${index - 1}`] : [],
+    }));
+    await page.locator('#paste-json').fill(JSON.stringify({ entities }));
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="Node0"]').click();
+    const graph = (await page.locator('#graph').boundingBox())!;
+    const first = (await page.getByRole('button', { name: 'Inspect Entity Node0' }).boundingBox())!;
+    const last = (await page.getByRole('button', { name: 'Inspect Entity Node9' }).boundingBox())!;
+    assert.ok(Math.abs(first.x + first.width / 2 - (graph.x + graph.width / 2)) < 2);
+    assert.ok(last.x >= graph.x && last.x + last.width <= graph.x + graph.width);
+    assert.ok(last.y >= graph.y && last.y + last.height <= graph.y + graph.height);
   } finally {
     await browser.close();
   }
