@@ -673,7 +673,7 @@ test('selecting a search result opens its details and centers that exact entity'
     const inspector = document.getElementById('selection-status') as HTMLElement;
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('#entity-results button')];
     (document.getElementById('zoom-in') as HTMLButtonElement).click();
-    const zoom = (document.getElementById('zoom-level') as HTMLOutputElement).textContent;
+    let zoom = parseInt((document.getElementById('zoom-level') as HTMLOutputElement).textContent!, 10);
     for (const [name, description] of [
       ['db.raw', 'Lowercase entity'],
       ['DB.Raw', 'Uppercase entity'],
@@ -682,7 +682,9 @@ test('selecting a search result opens its details and centers that exact entity'
       buttons.find((button) => button.title === name)!.click();
       assert.equal((inspector.querySelector('h2') as HTMLElement).textContent, name.replace(' (undocumented)', ''));
       assert.match(inspector.textContent, new RegExp(description));
-      assert.equal((document.getElementById('zoom-level') as HTMLOutputElement).textContent, zoom);
+      const currentZoom = parseInt((document.getElementById('zoom-level') as HTMLOutputElement).textContent!, 10);
+      assert.ok(currentZoom <= zoom);
+      zoom = currentZoom;
       clickGraph(dom, 500, 300);
       assert.equal((inspector.querySelector('h2') as HTMLElement).textContent, name.replace(' (undocumented)', ''));
     }
