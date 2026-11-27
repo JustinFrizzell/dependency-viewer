@@ -11,7 +11,9 @@ import { mountVisualPrototype } from './prototype-visual';
 
 if (
   process.env.NODE_ENV !== 'production' &&
-  (new URLSearchParams(location.search).has('variant') || location.pathname.endsWith('/visual-prototype.html'))
+  (new URLSearchParams(location.search).has('variant') ||
+    location.pathname.endsWith('/visual-prototype.html') ||
+    location.pathname.endsWith('/capability-placement-prototype.html'))
 ) {
   window.addEventListener('load', mountVisualPrototype);
 }
