@@ -1,7 +1,7 @@
 import { deriveGraph, parseDocument } from './data';
 import type { Graph, GraphEntity } from './document-types';
 
-// Three visual variants on the viewer route, switched with ?variant=A, B or C.
+// Three ways to place graph-first capabilities, switched with ?variant=A, B or C.
 const sample = {
   entities: [
     { name: 'raw.customers', description: 'Customer records from the production application.', dependencies: [], owner: 'Platform', freshness: 'Daily' },
@@ -78,6 +78,20 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--accent); outl
 .file-input { display:none; }
 .notice { position:absolute; z-index:9; top:95px; left:50%; transform:translateX(-50%); max-width:80%; padding:10px 15px; border-radius:9px; color:var(--text); background:var(--panel); border:1px solid var(--line); box-shadow:var(--shadow); font-size:12px; }
 .notice:empty { display:none; }
+.popover { position:absolute; z-index:8; top:82px; left:22px; width:320px; max-height:calc(100vh - 130px); overflow:auto; border-radius:14px; padding:16px; }
+.popover h2 { font-size:15px; margin:0 0 12px; }.popover h3 { font-size:11px; margin:14px 0 7px; color:var(--muted); text-transform:uppercase; }
+.popover p { color:var(--muted); font-size:12px; line-height:1.55; }
+.popover input:not([type=checkbox]), .popover textarea, .popover select { width:100%; padding:9px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+.popover textarea { min-height:160px; resize:vertical; font-family:monospace; font-size:11px; }
+.popover .menu-item { width:100%; justify-content:flex-start; margin:2px 0; }
+.popover .section { border-top:1px solid var(--line); margin-top:12px; padding-top:10px; }
+.popover .row { display:flex; align-items:center; gap:8px; margin:9px 0; }
+.popover .row input[type=checkbox] { width:auto; }
+.nav-bar { top:84px; left:20px; }.nav-bar .btn { font-size:11px; }
+.b .nav-bar { top:84px; left:82px; }.c .nav-bar { top:auto; bottom:23px; left:22px; }
+.b .popover { left:82px; }.c .popover { top:auto; bottom:80px; left:22px; }
+.b .detail-top,.c .detail-top { cursor:move; touch-action:none; }
+.control-label { color:var(--muted); font-size:10px; font-weight:700; padding:0 4px; }
 /* A: small floating controls and an on-canvas, node-adjacent card. */
 .a .topbar { top:18px; left:20px; right:20px; }
 .a .detail { top:100px; left:50%; }
@@ -100,7 +114,8 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--accent); outl
 .c .detail { top:100px; left:50%; width:490px; }
 .c .detail-body { display:grid; grid-template-columns:1fr 1fr; gap:0 20px; max-height:42vh; }
 .c .detail-body .overview { grid-row:span 2; }.c .detail-body h3:first-child { margin-top:0; }
-.c .zoom { bottom:20px; right:20px; }.c .summary { bottom:24px; left:22px; }
+.c .zoom { bottom:20px; right:20px; }.c .summary { top:90px; bottom:auto; left:22px; }
+.c .detail-body { display:block; max-height:min(65vh,490px); }
 @media (max-width:1000px) { .a .detail { left:auto; right:15px; }.c .browser { width:180px; }.c .topbar { left:auto; right:12px; transform:none; }.b .detail { width:300px; }.node { width:150px; } }
 @media (max-width:680px) { .detail,.b .detail,.c .detail { width:calc(100% - 32px); left:16px; right:16px; top:auto; bottom:75px; max-height:48vh; }.detail-body,.b .detail-body,.c .detail-body { max-height:32vh; overflow:auto; }.c .browser { display:none; }.topbar .optional { display:none; }.topbar .search { display:none; }.prototype-bar { bottom:9px; }.summary { display:none; } }
 `;
@@ -113,11 +128,12 @@ export function mountVisualPrototype() {
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML = `<style>${css}</style><div class="app"></div>`;
   const app = root.querySelector('.app') as HTMLElement;
-  const labels = { A: 'Anchored canvas', B: 'Inspector dock', C: 'Context workspace' } as const;
+  const labels = { A: 'Top controls', B: 'Tool rail', C: 'Bottom controls' } as const;
   type Variant = keyof typeof labels;
   const requested = new URLSearchParams(location.search).get('variant');
   let variant: Variant = requested === 'B' || requested === 'C' ? requested : 'A';
   let graph: Graph = deriveGraph(sample);
+  let documentText = JSON.stringify(sample, null, 2);
   let documentName = 'commerce-lineage.json';
   let theme = 'light';
   let mode = 'view';
@@ -130,6 +146,10 @@ export function mountVisualPrototype() {
   let zoom = 100;
   let filter = '';
   let notice = '';
+  let panel = '';
+  let search = '';
+  let graphView = 'all';
+  let paused = false;
 
   function detail(entity: GraphEntity) {
     const downstream = graph.entities.filter(item => item.dependencies.includes(entity.name));
@@ -138,7 +158,7 @@ export function mountVisualPrototype() {
       ? names.map(name => `<button class="rel" data-select="${escape(name)}"><b>↗</b><span>${escape(name)}</span><span class="grow"></span><span class="muted">›</span></button>`).join('')
       : '<span class="tiny">None</span>';
     return `<section class="detail floating" aria-label="Entity details">
-      <div class="detail-top"><span class="eyebrow">${persistent ? 'Selected on canvas' : 'Hover preview'}</span><span class="grow"></span>${variant === 'A' ? `<span class="tiny">${draggedPosition ? 'Hover to inspect · ' : ''}⠿ Drag to move</span>` : ''}<button class="btn" data-action="close" aria-label="Close details">✕</button></div>
+      <div class="detail-top"><span class="eyebrow">${persistent ? 'Selected on canvas' : 'Hover preview'}</span><span class="grow"></span><span class="tiny">${draggedPosition ? 'Hover to inspect · ' : ''}⠿ Drag to move</span><button class="btn" data-action="close" aria-label="Close details">✕</button></div>
       <div class="detail-body">
         <div class="overview"><div class="detail-title"><div class="detail-icon">▦</div><div><h2>${escape(entity.name)}</h2><span class="tiny">${entity.documented ? 'Documented Entity' : 'Undocumented dependency'}</span></div></div>
         <p>${escape(entity.description || (entity.documented ? 'No description provided.' : 'This dependency has no Entity record.'))}</p>
@@ -146,7 +166,7 @@ export function mountVisualPrototype() {
         ${extra.map(([key, value]) => `<div class="detail-row"><span class="key">${escape(key)}</span><span class="value">${escape(typeof value === 'string' ? value : JSON.stringify(value))}</span></div>`).join('')}</div>
         <div><h3>Dependencies · ${entity.dependencies.length}</h3>${links(entity.dependencies)}<h3>Used by · ${downstream.length}</h3>${links(downstream.map(item => item.name))}</div>
       </div>
-      <div class="detail-footer"><button class="btn outline" data-action="upstream">↖ Upstream</button><button class="btn outline" data-action="downstream">↗ Downstream</button><span class="grow"></span>${mode === 'edit' ? '<button class="btn primary" data-action="edit">Edit Entity</button>' : '<span class="tiny">Click a related Entity to navigate</span>'}</div>
+      <div class="detail-footer"><button class="btn outline" data-view="upstream">↖ Upstream</button><button class="btn outline" data-view="downstream">↗ Downstream</button><span class="grow"></span>${mode === 'edit' ? '<button class="btn primary" data-panel="entity">Edit Entity</button>' : '<span class="tiny">Click a related Entity to navigate</span>'}</div>
     </section>`;
   }
 
@@ -196,26 +216,44 @@ export function mountVisualPrototype() {
   }
   function toolbar() {
     const brand = `<div class="brand optional"><span class="logo">⌘</span><span>Dependency viewer</span></div><span class="separator optional"></span>`;
-    const documentControl = `<button class="btn outline optional" data-action="file">▤ ${escape(documentName)} ▾</button>`;
-    const search = `<label class="search optional">⌕ <input aria-label="Filter entities" placeholder="Find an Entity..." value="${escape(filter)}"></label>`;
+    const documentControl = `<button class="btn outline" data-panel="file">▤ ${escape(documentName)} ▾</button>`;
+    const searchControl = `<button class="btn outline" data-panel="search">⌕ Find Entity</button>`;
     const modes = `<div class="segmented"><button class="btn ${mode === 'view' ? 'active' : ''}" data-mode="view">View</button><button class="btn ${mode === 'edit' ? 'active' : ''}" data-mode="edit">Edit</button></div>`;
     const themeButton = `<button class="btn" data-action="theme" aria-label="Switch to ${theme === 'light' ? 'dark' : 'light'} mode">${theme === 'light' ? '☾' : '☀'}</button>`;
-    if (variant === 'A') return `<div class="topbar bar floating">${brand}${documentControl}<span class="grow"></span>${search}${modes}<button class="btn outline optional" data-action="export">Export ↗</button>${themeButton}</div>`;
-    if (variant === 'B') return `<div class="rail floating"><div class="logo">⌘</div><button class="btn active" title="Graph">⌘</button><button class="btn" data-action="file" title="Open Document">▤</button><button class="btn" data-action="search" title="Find Entity">⌕</button><span class="grow"></span>${themeButton}</div><div class="topbar bar floating"><div><strong style="font-size:12px">${escape(documentName)}</strong><div class="tiny">${graph.entities.length} entities · local Document</div></div><span class="grow"></span>${search}${modes}<button class="btn outline optional" data-action="export">Export ↗</button></div>`;
-    return `${browser()}<div class="topbar bar floating">${search}${modes}<button class="btn outline optional" data-action="file">Open</button>${themeButton}</div>`;
+    const edit = mode === 'edit' ? '<button class="btn primary" data-panel="add">＋ Add Entity</button><button class="btn" data-action="undo">Undo</button><button class="btn" data-action="redo">Redo</button>' : '';
+    const settings = '<button class="btn outline" data-panel="settings">Settings</button>';
+    const exportButton = '<button class="btn outline" data-panel="export">Export ↗</button>';
+    if (variant === 'A') return `<div class="topbar bar floating">${brand}${documentControl}${searchControl}<span class="grow"></span>${edit}${modes}${settings}${exportButton}${themeButton}</div>`;
+    if (variant === 'B') return `<div class="rail floating"><div class="logo">⌘</div><button class="btn" data-panel="file" title="File">▤</button><button class="btn" data-panel="search" title="Find Entity">⌕</button><button class="btn" data-panel="settings" title="Settings">⚙</button><button class="btn" data-panel="export" title="Export">⇧</button><span class="grow"></span>${themeButton}</div><div class="topbar bar floating"><strong style="font-size:12px">${escape(documentName)}</strong><span class="grow"></span>${edit}${modes}</div>`;
+    return `<div class="topbar bar floating">${brand}${documentControl}<span class="grow"></span>${edit}${modes}${themeButton}</div><div class="floating bar" style="bottom:24px;right:230px">${searchControl}${settings}${exportButton}</div>`;
+  }
+  function popover() {
+    if (!panel) return '';
+    let content = '';
+    if (panel === 'file') content = `<h2>File</h2><p>${escape(documentName)} · local Document</p><button class="btn menu-item" data-action="file">Open JSON file…</button><button class="btn menu-item" data-panel="paste">Paste and open JSON…</button><button class="btn menu-item" data-panel="json">View or edit JSON…</button><button class="btn menu-item" data-action="placeholder">Copy JSON</button><button class="btn menu-item" data-action="placeholder">Download JSON</button><button class="btn menu-item" data-panel="help">JSON format and example</button>`;
+    if (panel === 'paste') content = '<h2>Open pasted JSON</h2><p>Paste a Document to replace the current one.</p><textarea aria-label="Pasted JSON"></textarea><div class="row"><button class="btn primary" data-action="placeholder">Open pasted JSON</button></div>';
+    if (panel === 'json') content = `<h2>Opened Document</h2><p>${mode === 'view' ? 'Read-only in View mode.' : 'Edit and apply or discard a JSON draft.'}</p><textarea aria-label="Document JSON" ${mode === 'view' ? 'readonly' : ''}>${escape(documentText)}</textarea>${mode === 'edit' ? '<div class="row"><button class="btn primary" data-action="placeholder">Apply</button><button class="btn outline" data-action="placeholder">Discard</button></div>' : ''}`;
+    if (panel === 'help') content = '<h2>JSON format and example</h2><p>A Document contains Entities with names, optional descriptions, and Direct dependencies.</p><pre>{"entities": []}</pre>';
+    if (panel === 'search') content = `<h2>Find an Entity</h2><input aria-label="Search Entities" placeholder="Search full names" value="${escape(search)}"><div class="browser-list">${graph.entities.filter(entity => entity.name.toLowerCase().includes(search.toLowerCase())).map(entity => `<button class="browser-item" data-select="${escape(entity.name)}">▦ &nbsp; ${escape(entity.name)}</button>`).join('') || '<p>No matching Entities.</p>'}</div><div class="section"><h3>Filter graph</h3><input aria-label="Filter graph by Entity name" placeholder="Hide nonmatching nodes" value="${escape(filter)}"><p>Filtering changes what is visible; search navigates to an Entity.</p></div>`;
+    if (panel === 'settings') content = `<h2>Settings</h2><p>${mode === 'view' ? 'Document settings are read-only in View mode.' : 'Changes to these settings belong to the Document.'}</p><h3>Colour rules</h3><label class="row"><input type="checkbox" checked ${mode === 'view' ? 'disabled' : ''}> Colour Entities by name</label><div class="row"><span class="pill">● Gold</span><input value="gold" ${mode === 'view' ? 'disabled' : ''}></div><div class="row"><span class="pill">● Silver</span><input value="silver" ${mode === 'view' ? 'disabled' : ''}></div><div class="section"><h3>Graph presentation</h3><label class="row"><input type="checkbox" ${mode === 'view' ? 'disabled' : ''}> Compact nodes</label><label class="row"><input type="checkbox" checked ${mode === 'view' ? 'disabled' : ''}> Hover details</label></div>`;
+    if (panel === 'export') content = '<h2>Export graph</h2><p>Export the entire current filtered graph as a PNG.</p><label>Resolution<select aria-label="Export resolution"><option>1×</option><option>2×</option><option>4×</option></select></label><div class="row"><button class="btn primary" data-action="placeholder">Export PNG</button></div>';
+    if (panel === 'entity') content = `<h2>Edit Entity</h2><p>${escape(selected)}</p><input aria-label="Entity name" value="${escape(selected)}"><h3>Description</h3><textarea aria-label="Description"></textarea><div class="row"><button class="btn primary" data-action="placeholder">Apply</button><button class="btn outline" data-action="placeholder">Discard</button></div><div class="section"><button class="btn menu-item" data-action="placeholder">Edit additional properties…</button><button class="btn menu-item" data-action="placeholder">Add dependency by name…</button><button class="btn menu-item" data-action="placeholder">Remove Entity…</button></div>`;
+    if (panel === 'add') content = '<h2>Add Entity</h2><input aria-label="New Entity name" placeholder="Name"><h3>Description</h3><textarea aria-label="New Entity description" placeholder="Optional description"></textarea><div class="row"><button class="btn primary" data-action="placeholder">Add Entity</button><button class="btn outline" data-action="dismiss">Cancel</button></div>';
+    return `<section class="popover floating" aria-label="${escape(panel)} panel"><button class="btn" style="float:right" data-action="dismiss" aria-label="Close panel">✕</button>${content}</section>`;
   }
   function render() {
     host.setAttribute('data-theme', theme);
     app.className = `app ${variant.toLowerCase()}`;
     const entity = graph.entities.find(item => item.name === selected);
     app.innerHTML = `<div class="canvas" aria-label="Dependency graph">${graphMarkup()}</div>${toolbar()}
-      ${entity ? detail(entity) : ''}
+      ${entity ? detail(entity) : ''}${popover()}
+      <div class="nav-bar floating bar"><span class="control-label">VIEW</span>${['all', 'upstream', 'downstream', 'connected'].map(view => `<button class="btn ${graphView === view ? 'active' : ''}" data-view="${view}">${view[0].toUpperCase() + view.slice(1)}</button>`).join('')}<span class="separator"></span><button class="btn" data-panel="search">Filter ${filter ? '•' : ''}</button></div>
       <div class="summary floating bar"><span class="status"><span class="dot"></span>${graph.entities.length} entities <span>·</span> ${graph.edges.length} connections <span>·</span> ${escape(mode)} mode</span></div>
-      <div class="zoom floating"><button class="btn" data-action="zoom-out" aria-label="Zoom out">−</button><span class="tiny">${zoom}%</span><button class="btn" data-action="zoom-in" aria-label="Zoom in">＋</button><button class="btn" data-action="fit">Fit</button></div>
+      <div class="zoom floating"><button class="btn" data-action="pause">${paused ? 'Resume' : 'Pause'}</button><button class="btn" data-action="zoom-out" aria-label="Zoom out">−</button><span class="tiny">${zoom}%</span><button class="btn" data-action="zoom-in" aria-label="Zoom in">＋</button><button class="btn" data-action="fit">Fit</button></div>
       <div class="notice" role="status">${escape(notice)}</div>
       <input class="file-input" type="file" accept=".json,application/json">
       <div class="prototype-bar"><span class="prototype-note">Prototype</span><button data-action="previous" aria-label="Previous variant">←</button><strong>${variant} · ${labels[variant]}</strong><button data-action="next" aria-label="Next variant">→</button></div>`;
-    if (entity && variant !== 'B' && innerWidth > 680) {
+    if (entity && innerWidth > 680) {
       const node = [...root.querySelectorAll<HTMLElement>('[data-node]')].find(item => item.dataset.node === selected);
       const card = root.querySelector<HTMLElement>('.detail');
       if (node && card) {
@@ -225,9 +263,10 @@ export function mountVisualPrototype() {
           ? anchor.right + 18
           : anchor.left - cardBounds.width - 18;
         const preferredY = anchor.top - 100;
-        const x = variant === 'A' && draggedPosition ? draggedPosition.x : preferredX;
-        const y = variant === 'A' && draggedPosition ? draggedPosition.y : preferredY;
-        const moved = variant === 'A' && draggedPosition;
+        const x = draggedPosition ? draggedPosition.x : preferredX;
+        const y = draggedPosition ? draggedPosition.y : preferredY;
+        const moved = draggedPosition;
+        card.style.right = 'auto'; card.style.bottom = 'auto'; card.style.width = '340px';
         card.style.left = `${Math.max(moved ? 0 : 16, Math.min(innerWidth - cardBounds.width - (moved ? 0 : 16), x))}px`;
         card.style.top = `${Math.max(moved ? 0 : 90, Math.min(innerHeight - cardBounds.height - (moved ? 0 : 70), y))}px`;
       }
@@ -242,25 +281,35 @@ export function mountVisualPrototype() {
   app.addEventListener('click', event => {
     const target = event.target as HTMLElement;
     const select = target.closest<HTMLElement>('[data-select], [data-node]');
-    if (select) { selected = select.dataset.select || select.dataset.node || ''; persistent = true; notice = ''; render(); return; }
+    if (select) { selected = select.dataset.select || select.dataset.node || ''; persistent = true; notice = ''; panel = ''; render(); return; }
     const modeTarget = target.closest<HTMLElement>('[data-mode]');
     if (modeTarget) { mode = modeTarget.dataset.mode!; notice = mode === 'edit' ? 'Visual preview only: try actual graph editing in the separate interaction prototype.' : ''; render(); return; }
+    const panelTarget = target.closest<HTMLElement>('[data-panel]');
+    if (panelTarget) { panel = panel === panelTarget.dataset.panel ? '' : panelTarget.dataset.panel || ''; notice = ''; render(); return; }
+    const viewTarget = target.closest<HTMLElement>('[data-view]');
+    if (viewTarget) { graphView = viewTarget.dataset.view || 'all'; notice = 'Navigation placement preview: graph filtering is not implemented here.'; render(); return; }
     const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
     if (!action) return;
     if (action === 'previous' || action === 'next') { changeVariant(action === 'next' ? 1 : -1); return; }
     if (action === 'file') { (root.querySelector('.file-input') as HTMLInputElement).click(); return; }
     if (action === 'search') { (root.querySelector('.search input') as HTMLInputElement | null)?.focus(); return; }
     if (action === 'theme') theme = theme === 'light' ? 'dark' : 'light';
+    else if (action === 'dismiss') panel = '';
+    else if (action === 'pause') paused = !paused;
     else if (action === 'close') { selected = ''; persistent = false; draggedPosition = null; }
     else if (action === 'zoom-in') zoom = Math.min(140, zoom + 10);
     else if (action === 'zoom-out') zoom = Math.max(70, zoom - 10);
     else if (action === 'fit') zoom = 100;
-    else if (action === 'export' || action === 'edit' || action === 'upstream' || action === 'downstream') notice = 'This is a visual prototype; the production viewer retains this capability.';
+    else if (action === 'placeholder' || action === 'undo' || action === 'redo') notice = 'Placement preview only: this action is not implemented.';
     render();
   });
   app.addEventListener('input', event => {
     const input = event.target as HTMLInputElement;
-    if (input.matches('.search input')) {
+    if (input.matches('[aria-label="Search Entities"]')) {
+      search = input.value;
+      const list = root.querySelector<HTMLElement>('.popover .browser-list');
+      if (list) list.innerHTML = graph.entities.filter(entity => entity.name.toLowerCase().includes(search.toLowerCase())).map(entity => `<button class="browser-item" data-select="${escape(entity.name)}">▦ &nbsp; ${escape(entity.name)}</button>`).join('') || '<p>No matching Entities.</p>';
+    } else if (input.matches('[aria-label="Filter graph by Entity name"]')) {
       filter = input.value;
       root.querySelectorAll<HTMLElement>('[data-node]').forEach(node => { node.style.opacity = !filter || node.dataset.node?.toLowerCase().includes(filter.toLowerCase()) ? '1' : '.22'; });
     }
@@ -269,7 +318,9 @@ export function mountVisualPrototype() {
     const input = event.target as HTMLInputElement;
     if (!input.matches('.file-input') || !input.files?.[0]) return;
     try {
-      graph = deriveGraph(parseDocument(await input.files[0].text()));
+      const text = await input.files[0].text();
+      graph = deriveGraph(parseDocument(text));
+      documentText = text; panel = '';
       documentName = input.files[0].name; selected = graph.entities[0]?.name || ''; persistent = true; draggedPosition = null;
       notice = graph.entities.length > 35 ? 'Visual prototype shows the first 35 entities; the production viewer is not limited to 35.' : '';
     } catch (error) { notice = `Could not open Document: ${(error as Error).message}`; }
@@ -279,7 +330,7 @@ export function mountVisualPrototype() {
     const target = event.target as HTMLElement;
     const header = target.closest<HTMLElement>('.detail-top');
     const card = target.closest<HTMLElement>('.detail');
-    if (variant !== 'A' || !header || !card || target.closest('button') || event.button !== 0) return;
+    if (!header || !card || target.closest('button') || event.button !== 0) return;
     const bounds = card.getBoundingClientRect();
     drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, cardX: bounds.x, cardY: bounds.y, moved: false };
     header.setPointerCapture(event.pointerId);
@@ -309,12 +360,12 @@ export function mountVisualPrototype() {
   app.addEventListener('pointercancel', () => { drag = null; });
   app.addEventListener('pointerover', event => {
     if ((event.target as HTMLElement).closest('[data-node], .detail')) clearTimeout(closePreviewTimer);
-    if (drag || (persistent && !(variant === 'A' && draggedPosition))) return;
+    if (drag || (persistent && !draggedPosition)) return;
     const node = (event.target as HTMLElement).closest<HTMLElement>('[data-node]');
     if (node && node.dataset.node !== selected) { selected = node.dataset.node || ''; render(); }
   });
   app.addEventListener('focusin', event => {
-    if (variant !== 'A' || !draggedPosition) return;
+    if (!draggedPosition) return;
     const node = (event.target as HTMLElement).closest<HTMLElement>('[data-node]');
     if (node && node.dataset.node !== selected) {
       selected = node.dataset.node || '';
