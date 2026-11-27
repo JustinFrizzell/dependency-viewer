@@ -259,7 +259,9 @@ export function showGraph(
   let dismissTimer: ReturnType<typeof setTimeout> | undefined;
   function moveCard(left: number, top: number) {
     card.style.left = `${Math.max(0, Math.min(graph.width() - card.offsetWidth, left))}px`;
-    card.style.top = `${Math.max(0, Math.min(graph.height() - card.offsetHeight, top))}px`;
+    const cardTop = Math.max(0, Math.min(graph.height() - card.offsetHeight, top));
+    card.style.top = `${cardTop}px`;
+    card.style.setProperty('--inspector-top', `${cardTop}px`);
   }
   function inspectAutomatically(name: string) {
     if (
@@ -289,7 +291,9 @@ export function showGraph(
           8
         : 8;
     card.style.left = `${Math.max(8, Math.min(graph.width() - width - 8, position.x + node.renderedWidth() / 2 + 12))}px`;
-    card.style.top = `${Math.max(toolbarBottom, Math.min(graph.height() - height - 8, position.y - 20))}px`;
+    const cardTop = Math.max(toolbarBottom, Math.min(graph.height() - height - 8, position.y - 20));
+    card.style.top = `${cardTop}px`;
+    card.style.setProperty('--inspector-top', `${cardTop}px`);
   }
   cardHeader.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
@@ -645,6 +649,13 @@ export function showGraph(
       view = button.dataset.view;
       updateView(true);
     });
+  }
+  for (const direction of ['upstream', 'downstream']) {
+    (document.getElementById(`inspector-${direction}`) as HTMLButtonElement).onclick = () => {
+      if (!displayedName || !selectEntity(displayedName)) return;
+      view = direction;
+      updateView(true);
+    };
   }
   views.hidden = false;
   updateView(false);

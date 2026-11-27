@@ -252,11 +252,19 @@
         <div class="inspector-header">
           <strong>Entity details</strong>
           <button id="move-inspector" type="button">Move card</button>
-          <button id="move-entity" type="button" aria-describedby="entity-move-instructions" hidden>Move Entity</button>
           <button id="close-inspector" type="button" aria-label="Close Entity details">×</button>
         </div>
         <p id="entity-move-instructions" hidden>Use arrow keys to move, Enter to finish, or Escape to cancel.</p>
         <div id="selection-status">No entity selected. Select an entity to inspect its details.</div>
+        <div class="inspector-footer">
+          <button id="inspector-upstream" type="button" aria-label="Show upstream dependencies for this Entity">
+            ↖ Upstream
+          </button>
+          <button id="inspector-downstream" type="button" aria-label="Show downstream dependents for this Entity">
+            ↗ Downstream
+          </button>
+          <button id="move-entity" type="button" aria-describedby="entity-move-instructions" hidden>Move Entity</button>
+        </div>
       </section>
     </main>
   </body>

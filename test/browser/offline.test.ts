@@ -1032,6 +1032,50 @@ test('opens a pasted Document in the standalone viewer offline', async () => {
   }
 });
 
+test('Entity details match the anchored prototype in View mode', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 1440, height: 900 } });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"model.orders","description":"Orders","dependencies":["source.orders"]}]}');
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="model.orders"]').click();
+
+    const card = page.locator('#inspector');
+    const appearance = await card.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { width: element.getBoundingClientRect().width, radius: style.borderRadius };
+    });
+    assert.equal(appearance.width, 340);
+    assert.equal(appearance.radius, '15px');
+    assert.equal(await card.locator('#add-dependency-form').isVisible(), false);
+    assert.equal(await card.locator('.entity-overview-subtitle').textContent(), 'Documented Entity');
+    assert.equal(await card.locator('.inspector-details .documented-badge').textContent(), 'Documented entity');
+    assert.equal(
+      await card.getByRole('button', { name: 'source.orders (undocumented)' }).evaluate((element) => {
+        return getComputedStyle(element).borderStyle;
+      }),
+      'solid',
+    );
+
+    await card.getByRole('button', { name: 'Show upstream dependencies for this Entity' }).click();
+    assert.equal(await page.locator('#dependency-views [data-view="upstream"]').getAttribute('aria-pressed'), 'true');
+    assert.match((await page.locator('#graph-count').textContent())!, /^2 Entities/);
+    await card.getByRole('button', { name: 'Show downstream dependents for this Entity' }).click();
+    assert.equal(await page.locator('#dependency-views [data-view="downstream"]').getAttribute('aria-pressed'), 'true');
+    assert.match((await page.locator('#graph-count').textContent())!, /^1 Entity/);
+
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await card.getByRole('button', { name: 'Edit Entity' }).click();
+    assert.equal(await card.locator('#add-dependency-form').isVisible(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('edits and downloads a Document that can be uploaded offline with metadata intact', async () => {
   const browser = await chromium.launch({ headless: true });
   const downloadedPath = path.resolve('.tmp/browser-document.json');
@@ -1285,14 +1329,17 @@ test('graph edits preserve the filter and dependency view', async () => {
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="Alpha"]').click();
-    await page.getByRole('button', { name: 'Upstream' }).click();
+    await page.getByRole('button', { name: 'Upstream', exact: true }).click();
     await openFilter(page);
     await page.locator('#graph-filter').fill('Al');
     await openEntityEditor(page);
     await page.locator('#edit-entity-description').fill('Updated');
     await page.getByRole('button', { name: 'Apply Entity changes' }).click();
     assert.equal(await page.locator('#graph-filter').inputValue(), 'Al');
-    assert.equal(await page.getByRole('button', { name: 'Upstream' }).getAttribute('aria-pressed'), 'true');
+    assert.equal(
+      await page.getByRole('button', { name: 'Upstream', exact: true }).getAttribute('aria-pressed'),
+      'true',
+    );
     assert.match((await page.locator('#graph-count').textContent())!, /^2 Entities/);
     await openFilter(page);
     await page.locator('#graph-filter').fill('Alpine');
@@ -1300,7 +1347,10 @@ test('graph edits preserve the filter and dependency view', async () => {
     await page.getByRole('button', { name: 'Apply Entity changes' }).click();
     assert.equal(await page.locator('#graph-filter').inputValue(), 'Alpine');
     assert.match((await page.locator('#graph-count').textContent())!, /^1 Entity/);
-    assert.equal(await page.getByRole('button', { name: 'Upstream' }).getAttribute('aria-pressed'), 'true');
+    assert.equal(
+      await page.getByRole('button', { name: 'Upstream', exact: true }).getAttribute('aria-pressed'),
+      'true',
+    );
     await openFilter(page);
     await page.getByRole('button', { name: 'Clear graph filter' }).click();
     assert.match((await page.locator('#graph-count').textContent())!, /^2 Entities/);
@@ -1322,13 +1372,13 @@ test('Find and Filter are separate and preserve dependency view semantics', asyn
       );
     await page.locator('#open-paste').click();
     assert.match((await page.locator('#graph-count').textContent())!, /3 entities.*1 connection/i);
-    assert.equal(await page.getByRole('button', { name: 'Upstream' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Upstream', exact: true }).isDisabled(), true);
     await page.locator('#entity-list summary').click();
     await page.locator('#entity-search').fill('SOURCE.missing');
     await openFind(page);
     await page.locator('#entity-results button[title="source.Missing (undocumented)"]').click();
     assert.match((await page.locator('#selection-status').textContent())!, /source.Missing/);
-    await page.getByRole('button', { name: 'Downstream' }).click();
+    await page.getByRole('button', { name: 'Downstream', exact: true }).click();
     await openFilter(page);
     await page.locator('#graph-filter').fill('TOTAL');
     assert.match((await page.locator('#graph-summary').textContent())!, /report.Total/);
@@ -1943,7 +1993,9 @@ test('hover updates a moved card without announcing each inspection', async () =
     assert.ok(node);
     await page.mouse.move(node.x + node.width / 2, node.y + node.height / 2);
     assert.equal(await card.locator('h2').textContent(), 'B');
-    assert.deepEqual(await card.boundingBox(), position);
+    const updatedPosition = await card.boundingBox();
+    assert.equal(updatedPosition!.x, position!.x);
+    assert.equal(updatedPosition!.y, position!.y);
     assert.equal(await page.locator('#inspection-announcement').textContent(), announcement);
     await page.mouse.move(2, 2);
     assert.equal(await card.locator('h2').textContent(), 'B');
