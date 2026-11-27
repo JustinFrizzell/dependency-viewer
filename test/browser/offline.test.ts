@@ -1447,6 +1447,28 @@ test('rejects invalid connections and protects drafts for both editing paths', a
   }
 });
 
+test('touch users can add an undocumented dependency using the details form', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ hasTouch: true, offline: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"Report","dependencies":[]}]}');
+    await page.locator('#open-paste').tap();
+    await page.getByRole('button', { name: 'Edit', exact: true }).tap();
+    await page.locator('#entity-list summary').tap();
+    await page.locator('#entity-results button[title="Report"]').tap();
+    await page.getByLabel('Direct dependency name').fill('Remote');
+    await page.getByRole('button', { name: 'Add dependency', exact: true }).tap();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'Report', dependencies: ['Remote'] },
+    ]);
+    assert.match((await page.locator('#graph-summary').textContent())!, /Remote \(undocumented\)/);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('hover updates a moved card without announcing each inspection', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
