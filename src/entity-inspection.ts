@@ -50,13 +50,24 @@ export function setupEntityInspection({
     const card = document.getElementById('inspector') as HTMLElement;
     card.classList.remove('editor-open');
     inspector.replaceChildren();
+    const title = document.createElement('div');
+    title.className = 'entity-overview-heading';
+    const icon = document.createElement('span');
+    icon.className = 'entity-overview-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '▦';
+    const titleText = document.createElement('div');
     const heading = document.createElement('h2');
     heading.textContent = entity.name;
-    inspector.appendChild(heading);
+    const subtitle = document.createElement('div');
+    subtitle.className = 'entity-overview-subtitle';
+    subtitle.textContent = entity.documented ? 'Documented Entity' : 'Undocumented Entity';
+    titleText.append(heading, subtitle);
+    title.append(icon, titleText);
+    inspector.appendChild(title);
     const badge = document.createElement('span');
     badge.className = entity.documented ? 'documented-badge' : 'undocumented-badge';
     badge.textContent = entity.documented ? 'Documented entity' : 'Undocumented entity';
-    inspector.appendChild(badge);
     const editButton = document.createElement('button');
     editButton.type = 'button';
     editButton.className = 'edit-only entity-editor-toggle';
@@ -221,7 +232,7 @@ export function setupEntityInspection({
     descriptionHeading.textContent = 'Description';
     const descriptionText = document.createElement('p');
     descriptionText.textContent = entity.documented ? entity.description || 'No description provided.' : 'Unknown';
-    description.append(descriptionHeading, descriptionText);
+    description.append(descriptionHeading, descriptionText, badge);
     if (entity.extras && entity.extras.length) {
       const extras = document.createElement('dl');
       extras.className = 'entity-extras';
@@ -354,7 +365,7 @@ export function setupEntityInspection({
       dependencies,
       relationshipSection('Direct downstream entities', downstream.get(name)!, 'No downstream entities.'),
     );
-    inspector.appendChild(details);
+    inspector.insertBefore(details, form);
   }
   return { hasEntityDraft, hasDependencyDraft, canChangeSelection, showEntity };
 }
