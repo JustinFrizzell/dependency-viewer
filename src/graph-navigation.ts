@@ -65,44 +65,52 @@ export function showGraph(
   } catch {
     // Conflicting settings are reported by the controls; use the default presentation.
   }
+  const graphStyles = (dark: boolean): cytoscape.StylesheetJson => [
+    {
+      selector: 'node',
+      style: {
+        label: 'data(label)',
+        shape: 'round-rectangle',
+        width: compact ? 150 : 200,
+        height: compact ? 40 : 54,
+        'background-color': dark ? '#253d48' : '#ffffff',
+        'border-color': dark ? '#a6c1c7' : '#607d87',
+        'border-width': 2,
+        color: dark ? '#edf5f5' : '#172b3a',
+        'font-size': 13,
+        'font-weight': 600,
+        'text-wrap': 'ellipsis',
+        'text-max-width': (compact ? 130 : 180) as unknown as string,
+        'text-halign': 'center',
+        'text-valign': 'center',
+      },
+    },
+    {
+      selector: 'node.undocumented',
+      style: {
+        'border-style': 'dashed',
+        'border-color': dark ? '#f5cb78' : '#956000',
+        'background-color': dark ? '#3d3426' : '#fff9ec',
+      },
+    },
+    { selector: 'node.inspected', style: { 'border-color': dark ? '#65ddca' : '#087c72', 'border-width': 5 } },
+    {
+      selector: 'edge',
+      style: {
+        ...dependencyEdgeStyle,
+        'line-color': dark ? '#a6c1c7' : '#607d87',
+        'target-arrow-color': dark ? '#a6c1c7' : '#607d87',
+      },
+    },
+    { selector: '.filtered-out', style: { display: 'none' } },
+  ];
   const graph = cytoscape({
     container: document.getElementById('graph') as HTMLElement,
     elements,
     autounselectify: true,
     minZoom: 0.01,
     maxZoom: 4,
-    style: [
-      {
-        selector: 'node',
-        style: {
-          label: 'data(label)',
-          shape: 'round-rectangle',
-          width: compact ? 150 : 200,
-          height: compact ? 40 : 54,
-          'background-color': '#ffffff',
-          'border-color': '#a8c6ce',
-          'border-width': 2,
-          color: '#204152',
-          'font-size': 13,
-          'font-weight': 600,
-          'text-wrap': 'ellipsis',
-          'text-max-width': (compact ? 130 : 180) as unknown as string,
-          'text-halign': 'center',
-          'text-valign': 'center',
-        },
-      },
-      {
-        selector: 'node.undocumented',
-        style: {
-          'border-style': 'dashed',
-          'border-color': '#c08b3a',
-          'background-color': '#fff9ec',
-        },
-      },
-      { selector: 'node.inspected', style: { 'border-color': '#168a80', 'border-width': 4 } },
-      { selector: 'edge', style: dependencyEdgeStyle },
-      { selector: '.filtered-out', style: { display: 'none' } },
-    ],
+    style: graphStyles(document.documentElement.dataset.theme === 'dark'),
     layout: {
       name: 'dagre',
       rankDir: 'LR',
@@ -113,8 +121,21 @@ export function showGraph(
       animate: false,
     } as dagre.DagreLayoutOptions,
   });
+  const applyGraphTheme = () =>
+    graph
+      .style()
+      .fromJson(graphStyles(document.documentElement.dataset.theme === 'dark'))
+      .update();
+  document.addEventListener('themechange', applyGraphTheme);
   setupDocumentSettings(graph);
-  const imageExport = setupImageExport(window, document, graph);
+  const imageExport = setupImageExport(window, document, graph, (options) => {
+    graph.style().fromJson(graphStyles(false)).update();
+    try {
+      return graph.png(options);
+    } finally {
+      applyGraphTheme();
+    }
+  });
   const entities = new Map(data.entities.map((entity) => [entity.name, entity]));
   const downstream = new Map<string, string[]>(data.entities.map((entity) => [entity.name, []]));
   for (const edge of data.edges) downstream.get(edge.source)!.push(edge.target);
@@ -473,6 +494,7 @@ export function showGraph(
     resize: () => graph.resize(),
     cleanup: () => {
       clearTimeout(dismissTimer);
+      document.removeEventListener('themechange', applyGraphTheme);
       stopEdgeMotion();
       imageExport.cleanup();
       graph.destroy();

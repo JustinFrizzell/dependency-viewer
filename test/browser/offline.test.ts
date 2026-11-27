@@ -33,6 +33,303 @@ function trackExternalRequests(page: Page) {
   return requests;
 }
 
+function contrast(first: string, second: string) {
+  const luminance = (colour: string) => {
+    const components = colour.match(/\d+/g)!.slice(0, 3).map(Number);
+    return components.reduce((sum, component, index) => {
+      const value = component / 255;
+      return (
+        sum + [0.2126, 0.7152, 0.0722][index] * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+      );
+    }, 0);
+  };
+  const values = [luminance(first), luminance(second)].sort((a, b) => a - b);
+  return (values[1] + 0.05) / (values[0] + 0.05);
+}
+
+test('theme follows the system until an explicit choice is made', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ colorScheme: 'light', offline: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    const theme = page.getByLabel('Theme');
+    assert.equal(await theme.inputValue(), 'system');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await theme.selectOption('light');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    await theme.selectOption('dark');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await theme.selectOption('system');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('theme text and essential controls meet contrast targets', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    for (const theme of ['light', 'dark']) {
+      await page.getByLabel('Theme').selectOption(theme);
+      for (const selector of ['#inspector', '#zoom-in', '#graph-count', '#filter-menu summary', '#theme-preference']) {
+        const colours = await page.locator(selector).evaluate((element) => {
+          const style = getComputedStyle(element);
+          return [style.color, style.backgroundColor, style.borderTopColor];
+        });
+        assert.ok(contrast(colours[0], colours[1]) >= 4.5, `${theme} ${selector} text`);
+        if (selector === '#zoom-in' || selector === '#filter-menu summary') {
+          assert.ok(contrast(colours[2], colours[1]) >= 3, `${theme} ${selector} boundary`);
+        }
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test('dark theme renders readable workspace surfaces and controls offline', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    await page.getByLabel('Theme').selectOption('dark');
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    const colours = await page.evaluate(() => {
+      return {
+        canvas: getComputedStyle(document.querySelector('main')!).backgroundColor,
+        panel: getComputedStyle(document.querySelector('#inspector')!).backgroundColor,
+        text: getComputedStyle(document.querySelector('#inspector')!).color,
+        button: getComputedStyle(document.querySelector('#zoom-in')!).backgroundColor,
+        buttonText: getComputedStyle(document.querySelector('#zoom-in')!).color,
+      };
+    });
+    assert.notEqual(colours.canvas, 'rgb(245, 249, 250)');
+    assert.notEqual(colours.panel, 'rgb(255, 255, 255)');
+    assert.notEqual(colours.button, 'rgb(255, 255, 255)');
+    assert.notEqual(colours.text, colours.panel);
+    assert.notEqual(colours.buttonText, colours.button);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('dark graph and white PNG retain colour rules, connections and selection', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({
+      offline: true,
+      acceptDownloads: true,
+      viewport: { width: 1200, height: 900 },
+    });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill(
+        '{"entities":[{"name":"bronze A","dependencies":["Missing"]},{"name":"Plain","dependencies":["bronze A"]}]}',
+      );
+    await page.locator('#open-paste').click();
+    await page.getByLabel('Theme').selectOption('dark');
+    await openFind(page);
+    await page.locator('#entity-results button[title="Plain"]').click();
+    await page.getByRole('button', { name: 'Close Entity details' }).click();
+    await page.locator('#entity-list summary').click();
+    await page.locator('#fit').click();
+    const screenshot = await page.screenshot();
+    const counts = await page.evaluate(async (base64) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${base64}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const result: Record<string, number> = {};
+      for (let i = 0; i < pixels.length; i += 4) {
+        const key = `${pixels[i]},${pixels[i + 1]},${pixels[i + 2]}`;
+        result[key] = (result[key] || 0) + 1;
+      }
+      return result;
+    }, screenshot.toString('base64'));
+    assert.ok(counts['37,61,72'] > 50, 'uncoloured nodes use the dark graph palette');
+    assert.ok(counts['233,201,173'] > 50, 'rule colours remain unchanged');
+    assert.ok(counts['101,221,202'] > 20, 'selection outline is visible');
+    assert.ok(counts['245,203,120'] > 20, 'undocumented outline is visible');
+    await page.locator('#export-menu summary').click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#export-png').click();
+    const chunks: Buffer[] = [];
+    for await (const chunk of await (await downloadPromise).createReadStream()) chunks.push(chunk);
+    const png = Buffer.concat(chunks).toString('base64');
+    const exportCounts = await page.evaluate(async (base64) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${base64}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const result: Record<string, number> = {};
+      for (let i = 0; i < pixels.length; i += 4) {
+        const key = `${pixels[i]},${pixels[i + 1]},${pixels[i + 2]}`;
+        result[key] = (result[key] || 0) + 1;
+      }
+      return result;
+    }, png);
+    assert.ok(exportCounts['255,255,255'] > 100, 'white background');
+    assert.ok(exportCounts['233,201,173'] > 50, 'displayed colour rule');
+    assert.ok(exportCounts['8,124,114'] > 20, 'selection outline visible on white');
+    assert.ok(exportCounts['96,125,135'] > 20, 'edges visible on white');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('theme preference persists without storing Documents and survives unavailable browser APIs', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ colorScheme: 'dark', offline: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page.evaluate(() => localStorage.clear());
+    await page.getByLabel('Theme').selectOption('light');
+    await page.locator('#paste-json').fill('{"entities":[{"name":"Private","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), ['dependency-viewer-theme']);
+    await page.reload();
+    assert.equal(await page.getByLabel('Theme').inputValue(), 'light');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    await page.evaluate(() => localStorage.setItem('dependency-viewer-theme', 'invalid'));
+    await page.reload();
+    assert.equal(await page.getByLabel('Theme').inputValue(), 'system');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+
+    const blocked = await browser.newContext({ offline: true });
+    await blocked.addInitScript(`
+      Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
+      Object.defineProperty(window, 'matchMedia', { value: undefined });
+    `);
+    const unavailable = await blocked.newPage();
+    await unavailable.goto(viewer);
+    assert.equal(await unavailable.evaluate(() => typeof window.matchMedia), 'undefined');
+    assert.equal(
+      await unavailable.evaluate(() => {
+        try {
+          void window.localStorage;
+          return false;
+        } catch {
+          return true;
+        }
+      }),
+      true,
+    );
+    assert.equal(await unavailable.getByLabel('Theme').inputValue(), 'system');
+    assert.equal(await unavailable.locator('html').getAttribute('data-theme'), 'light');
+    await unavailable.getByLabel('Theme').selectOption('dark');
+    await unavailable.locator('#paste-json').fill('{"entities":[]}');
+    await unavailable.locator('#open-paste').click();
+    assert.equal(await unavailable.locator('html').getAttribute('data-theme'), 'dark');
+    await unavailable.reload();
+    await unavailable.waitForFunction(
+      () => (document.getElementById('theme-preference') as HTMLSelectElement).value === 'system',
+      null,
+      { timeout: 2000 },
+    );
+    assert.equal(await unavailable.getByLabel('Theme').inputValue(), 'system');
+    assert.equal(await unavailable.locator('html').getAttribute('data-theme'), 'light');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('switching themes preserves Document settings, history and session state', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    const original = {
+      entities: [{ name: 'bronze A', dependencies: [] }],
+      settings: { colours: { texts: { bronze: 'A' } }, appearance: { compact: true }, tooltips: { enabled: false } },
+    };
+    await page.locator('#paste-json').fill(JSON.stringify(original));
+    await page.locator('#open-paste').click();
+    const before = await page.locator('#document-json').inputValue();
+    await page.getByLabel('Theme').selectOption('dark');
+    assert.equal(await page.locator('#document-json').inputValue(), before);
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    assert.equal(await page.locator('#undo-document').isDisabled(), true);
+    await openSettings(page);
+    assert.equal(await page.locator('#compact-nodes').isChecked(), true);
+    assert.equal(await page.locator('#tooltips-enabled').isChecked(), false);
+    assert.equal(await page.getByLabel('Text for bronze colour').inputValue(), 'A');
+    await page.locator('#compact-nodes').uncheck();
+    const changed = await page.locator('#document-json').inputValue();
+    await page.getByLabel('Theme').selectOption('light');
+    assert.equal(await page.locator('#document-json').inputValue(), changed);
+    await page.locator('#undo-document').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), original);
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    await page.locator('#toggle-file-panel').click();
+    await page.locator('#paste-json').fill('{"entities":[]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.getByLabel('Theme').inputValue(), 'light');
+    await page.locator('#toggle-file-panel').click();
+    const conflicting = '{"entities":[],"settings":{"colours":{"unexpected":1},"appearance":{"compact":"broken"}}}';
+    await page.locator('#paste-json').fill(conflicting);
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openSettings(page);
+    assert.match((await page.locator('#colour-error').textContent())!, /conflict/i);
+    assert.match((await page.locator('#presentation-error').textContent())!, /conflict/i);
+    assert.equal(await page.locator('#colours-enabled').isDisabled(), true);
+    assert.equal(await page.locator('#compact-nodes').isDisabled(), true);
+    const incompatibleJSON = await page.locator('#document-json').inputValue();
+    await page.getByLabel('Theme').selectOption('dark');
+    assert.equal(await page.locator('#document-json').inputValue(), incompatibleJSON);
+    assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('opening a graph works when system preference queries throw', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ offline: true });
+    await context.addInitScript(`window.matchMedia = () => { throw new Error('unavailable'); };`);
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    assert.match((await page.locator('#graph-summary').textContent())!, /A/);
+    assert.equal(await page.locator('#zoom-in').isVisible(), true);
+    await page.locator('#edge-motion').click();
+    assert.equal(await page.locator('#edge-motion').textContent(), 'Resume');
+  } finally {
+    await browser.close();
+  }
+});
+
 test('opens in View and enables Document editing only in Edit', async () => {
   const browser = await chromium.launch({ headless: true });
   try {

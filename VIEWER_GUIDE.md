@@ -13,6 +13,8 @@ The build writes `dist/dependency-viewer.html`, with scripts and styles embedded
 
 The viewer starts in **View**, and every successful open returns to View and resets history and transient view state. View keeps JSON read-only and hides editing and history controls; navigation, search, node movement, copy, download, and export remain available. Select **Edit** to modify the Document and its settings. Switching modes does not save changes.
 
+Use **Theme** in the top bar to choose **System**, **Light**, or **Dark** in either mode. System is the default and follows operating-system changes; if the preference is unavailable, it uses Light. The choice is remembered locally when browser policies allow, but Documents and drafts are never stored. Theme changes do not edit the Document, affect undo history, or reset its appearance settings.
+
 When switching from Edit to View with unfinished drafts, choose **Apply**, **Discard**, or **Stay in Edit**. Invalid drafts cannot be applied. If multiple drafts conflict, discard the conflicting draft before applying another; nothing is merged automatically. Drafts remain unsaved until resolved.
 
 In Edit, expand **Document JSON** (or choose **View Document JSON** from File) to edit the JSON and apply or discard the draft. Invalid drafts cannot replace the Document or be copied or downloaded. Apply is one undoable change; **Undo** and **Redo** operate within the current session, and opening another Document resets history. An unapplied draft must be applied or discarded before other Document edits. Unknown properties and repeated dependency entries are retained; undocumented graph nodes are not added as Entity records. Whitespace may change. The viewer rejects duplicate object keys and numbers that cannot round-trip accurately; store such numbers as strings if needed.
@@ -87,6 +89,7 @@ On an isolated macOS test environment where networking can safely be disabled, o
 - Drag to pan, zoom using the wheel and buttons, and reset to fit. Collapse and reopen the entity list.
 - Verify View is read-only. Select **Edit**, create a draft, and check that switching to View offers apply, discard, or stay. Check that an invalid draft cannot be applied.
 - In Edit, open **Settings**, edit and reorder colour rules, download the Document and reopen the downloaded file. Verify colours and priority return, then select Edit and reset them.
+- Switch between System, Light, and Dark in View; check System follows the operating system and that selection, undocumented nodes, controls, and details remain legible. Export a filtered graph in both themes and verify the white PNG includes offscreen nodes, edges, colour rules, and the selection.
 - Hover a node and verify the tooltip details; use the keyboard to select the same Entity from the list and verify the details are available without hover. In Edit, change presentation settings, download and reopen, then select Edit and reset them.
 - Select `dist/dependency-acceptance-empty.json` and verify the empty state. Refresh and verify that the viewer asks for a file again.
 
