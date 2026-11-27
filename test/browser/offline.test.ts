@@ -47,6 +47,196 @@ function contrast(first: string, second: string) {
   return (values[1] + 0.05) / (values[0] + 0.05);
 }
 
+test('blank canvas mouse click opens creation but panning and touch do not', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ offline: true, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[]}');
+    await page.locator('#open-paste').click();
+    const graph = page.locator('#graph');
+    const box = (await graph.boundingBox())!;
+    const point = { x: box.x + box.width * 0.6, y: box.y + box.height * 0.6 };
+    const panel = page.locator('#add-entity-panel');
+    await page.mouse.click(point.x, point.y);
+    assert.equal(await panel.isVisible(), false);
+    await page.locator('#mode-edit').click();
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    await page.mouse.move(point.x + 30, point.y + 20);
+    await page.mouse.up();
+    assert.equal(await panel.evaluate((element: HTMLDetailsElement) => element.open), false);
+    await page.touchscreen.tap(point.x, point.y);
+    assert.equal(await panel.evaluate((element: HTMLDetailsElement) => element.open), false);
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    await page.evaluate(() => window.dispatchEvent(new Event('pointercancel')));
+    await page.mouse.up();
+    assert.equal(await panel.evaluate((element: HTMLDetailsElement) => element.open), false);
+    await page.mouse.click(point.x, point.y);
+    assert.equal(await panel.evaluate((element: HTMLDetailsElement) => element.open), true);
+    assert.equal(
+      await page.locator('#new-entity-name').evaluate((element) => element === document.activeElement),
+      true,
+    );
+    await page.locator('#new-entity-name').fill('First');
+    await page.locator('#add-entity-form button[type=submit]').click();
+    assert.equal(await page.locator('#inspector h2').textContent(), 'First');
+    await page.locator('#undo-document').click();
+    assert.match((await page.locator('#graph-count').textContent())!, /^0 Entities/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('renaming and removing an undocumented Entity changes references without creating a record', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":["Missing","Missing"]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="Missing (undocumented)"]').click();
+    await page.locator('#edit-entity-name').fill('External');
+    await page.locator('#edit-entity-form button[type=submit]').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'A', dependencies: ['External', 'External'] },
+    ]);
+    await page.locator('#delete-entity').click();
+    await page.locator('#delete-entity-remove').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'A', dependencies: [] },
+    ]);
+    await page.locator('#undo-document').click();
+    await page.locator('#undo-document').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'A', dependencies: ['Missing', 'Missing'] },
+    ]);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('touch Add Entity documents a missing dependency and validates names without losing work', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true, hasTouch: true });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"Report","dependencies":["Missing"]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await page.locator('#add-entity-panel summary').tap();
+    const name = page.locator('#new-entity-name');
+    await name.fill(' Report');
+    await page.locator('#add-entity-form button[type=submit]').tap();
+    assert.match((await page.locator('#add-entity-error').textContent())!, /whitespace/i);
+    await name.fill('Report');
+    await page.locator('#add-entity-form button[type=submit]').tap();
+    assert.match((await page.locator('#add-entity-error').textContent())!, /exists/i);
+    await name.fill('Missing');
+    await page.locator('#new-entity-description').fill('Now documented');
+    await page.locator('#add-entity-form button[type=submit]').tap();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'Missing');
+    assert.match((await page.locator('#selection-status').textContent())!, /Documented entity/);
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'Report', dependencies: ['Missing'] },
+      { name: 'Missing', dependencies: [], description: 'Now documented' },
+    ]);
+    await page.locator('#undo-document').tap();
+    assert.match((await page.locator('#graph-summary').textContent())!, /Missing \(undocumented\)/);
+    await page.locator('#redo-document').tap();
+    assert.equal(JSON.parse(await page.locator('#document-json').inputValue()).entities.length, 2);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('a new Entity draft is protected when selecting another Entity', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await page.locator('#add-entity-panel summary').click();
+    await page.locator('#new-entity-name').fill('New');
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    assert.equal(await page.getByRole('button', { name: 'Stay on current Entity' }).isVisible(), true);
+    assert.equal(await page.locator('#new-entity-name').inputValue(), 'New');
+    await page.getByRole('button', { name: 'Stay on current Entity' }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.getByRole('button', { name: 'Discard new Entity draft' }).last().click();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'A');
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'A', dependencies: [] },
+    ]);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('contextual Entity changes and deletion choices preserve references and undo independently', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    const original = {
+      entities: [
+        { name: 'A', dependencies: [], custom: { keep: true } },
+        { name: 'B', dependencies: ['A', 'A', 'Missing'] },
+      ],
+      extra: ['preserved'],
+    };
+    await page.locator('#paste-json').fill(JSON.stringify(original));
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#edit-entity-name').fill('Missing');
+    await page.locator('#edit-entity-form button[type=submit]').click();
+    assert.match((await page.locator('#edit-entity-error').textContent())!, /exists/i);
+    await page.locator('#edit-entity-name').fill('Renamed');
+    await page.locator('#edit-entity-description').fill('Updated');
+    await page.locator('#edit-entity-form button[type=submit]').click();
+    let data = JSON.parse(await page.locator('#document-json').inputValue());
+    assert.deepEqual(data.entities[1].dependencies, ['Renamed', 'Renamed', 'Missing']);
+    await page.getByRole('button', { name: 'Edit properties' }).click();
+    await page.locator('#metadata-property').selectOption({ label: 'custom' });
+    await page.locator('#metadata-value').fill('{"keep":false,"values":[1,null]}');
+    await page.locator('#metadata-form button[type=submit]').click();
+    data = JSON.parse(await page.locator('#document-json').inputValue());
+    assert.deepEqual(data.entities[0].custom, { keep: false, values: [1, null] });
+    await page.locator('#delete-entity').click();
+    await page.locator('#delete-entity-cancel').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), data);
+    await page.locator('#delete-entity').click();
+    await page.locator('#delete-entity-retain').click();
+    assert.match((await page.locator('#graph-summary').textContent())!, /Renamed \(undocumented\)/);
+    await page.locator('#undo-document').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="Renamed"]').click();
+    await page.locator('#delete-entity').click();
+    await page.locator('#delete-entity-remove').click();
+    data = JSON.parse(await page.locator('#document-json').inputValue());
+    assert.deepEqual(data.entities[0].dependencies, ['Missing']);
+    assert.deepEqual(data.extra, ['preserved']);
+    await page.locator('#undo-document').click();
+    await page.locator('#undo-document').click();
+    data = JSON.parse(await page.locator('#document-json').inputValue());
+    assert.deepEqual(data.entities[0].custom, { keep: true });
+    await page.locator('#undo-document').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), original);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('theme follows the system until an explicit choice is made', async () => {
   const browser = await chromium.launch({ headless: true });
   try {

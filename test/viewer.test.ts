@@ -1426,11 +1426,11 @@ test('new Entity drafts block saving and survive graph edits until discarded', (
   const dom = open({ raw: '{"entities":[{"name":"A","dependencies":[]}]}' });
   try {
     const { document, Event } = dom.window;
+    (document.querySelector('#entity-results button[title="A"]') as HTMLButtonElement).click();
     const input = document.getElementById('new-entity-name') as HTMLInputElement;
     input.value = ' invalid ';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     assert.equal((document.getElementById('download-document') as HTMLButtonElement).disabled, true);
-    (document.querySelector('#entity-results button[title="A"]') as HTMLButtonElement).click();
     document
       .querySelector('#add-dependency-form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
