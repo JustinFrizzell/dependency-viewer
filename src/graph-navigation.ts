@@ -199,7 +199,7 @@ export function showGraph(
         button.appendChild(detail);
       }
       button.addEventListener('click', () => {
-        if (!selectEntity(entity.name)) return;
+        if (!selectEntity(entity.name, button)) return;
         const node = graph.getElementById(ids.get(entity.name)!);
         const bounds = graph.elements().not('.filtered-out').boundingBox();
         const { x, y } = node.position();
@@ -301,6 +301,7 @@ export function showGraph(
     cardHeader.addEventListener('pointercancel', onEnd);
   });
   moveButton.addEventListener('click', () => {
+    moveButton.focus();
     keyboardStart = { left: card.offsetLeft, top: card.offsetTop, moved, persistent };
     moveButton.setAttribute('aria-pressed', 'true');
     moveButton.textContent = 'Moving card: arrows, Enter to finish, Escape to cancel';
@@ -351,6 +352,7 @@ export function showGraph(
   }
   moveEntityButton.addEventListener('click', () => {
     if (!selected || entityMove) return;
+    moveEntityButton.focus();
     const { x, y } = graph.getElementById(ids.get(selected)!).position();
     entityMove = { name: selected, x, y };
     moveEntityButton.setAttribute('aria-pressed', 'true');
@@ -475,7 +477,7 @@ export function showGraph(
     button.addEventListener('focus', () => {
       if (moved) inspectAutomatically(entity.name);
     });
-    button.addEventListener('click', () => selectEntity(entity.name));
+    button.addEventListener('click', () => selectEntity(entity.name, button));
     graphEntities.appendChild(button);
     entityButtons.set(entity.name, button);
     const source = document.createElement('button');
@@ -598,7 +600,7 @@ export function showGraph(
   }
   views.hidden = false;
   updateView(false);
-  function selectEntity(name: string) {
+  function selectEntity(name: string, trigger?: HTMLElement) {
     finishEntityMove(true);
     if (hasOtherEntityDraft()) {
       resolveSelectionDraft(name);
@@ -613,7 +615,8 @@ export function showGraph(
       resolveSelectionDraft(name);
       return false;
     }
-    if (document.activeElement instanceof HTMLElement && !card.contains(document.activeElement))
+    if (trigger) invokingControl = trigger;
+    else if (document.activeElement instanceof HTMLElement && !card.contains(document.activeElement))
       invokingControl = document.activeElement;
     const clearFilter = !name.toLowerCase().includes(filterQuery());
     if (clearFilter) graphFilter.value = '';

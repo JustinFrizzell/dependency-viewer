@@ -1,13 +1,41 @@
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium, type Page } from 'playwright';
+import { chromium as chromiumEngine, webkit, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 
 fs.mkdirSync('.tmp', { recursive: true });
 process.env.TMPDIR = path.resolve('.tmp');
 const viewer = pathToFileURL(path.resolve('dist/dependency-viewer.html')).href;
+const browserName = process.env.BROWSER || 'chromium';
+if (browserName !== 'chromium' && browserName !== 'webkit') throw new Error(`Unsupported browser: ${browserName}`);
+const chromium = browserName === 'webkit' ? webkit : chromiumEngine;
+const externalRequests: string[] = [];
+
+afterEach(() => {
+  const requests = externalRequests.splice(0);
+  assert.deepEqual(requests, [], 'The standalone viewer must not make external requests');
+});
+
+async function newContext(browser: Browser, options?: BrowserContextOptions) {
+  const context = await browser.newContext(options);
+  await context.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('file:') || url.startsWith('blob:') || url.startsWith('data:')) return route.continue();
+    externalRequests.push(url);
+    return route.abort();
+  });
+  await context.routeWebSocket('**/*', (socket) => {
+    externalRequests.push(socket.url());
+    socket.close();
+  });
+  return context;
+}
+
+async function newPage(browser: Browser, options?: BrowserContextOptions) {
+  return (await newContext(browser, options)).newPage();
+}
 
 async function openFind(page: Page) {
   const list = page.locator('#entity-list');
@@ -50,7 +78,7 @@ function contrast(first: string, second: string) {
 test('blank canvas mouse click opens creation but panning and touch do not', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ offline: true, hasTouch: true });
+    const context = await newContext(browser, { offline: browserName !== 'webkit', hasTouch: true });
     const page = await context.newPage();
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[]}');
@@ -93,7 +121,7 @@ test('blank canvas mouse click opens creation but panning and touch do not', asy
 test('creating an Entity on the canvas places it at the click without moving existing Entities', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    const page = await newPage(browser, { viewport: { width: 1200, height: 900 } });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"Existing","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -117,7 +145,7 @@ test('creating an Entity on the canvas places it at the click without moving exi
 test('renaming and removing an undocumented Entity changes references without creating a record', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":["Missing","Missing"]}]}');
     await page.locator('#open-paste').click();
@@ -147,7 +175,7 @@ test('renaming and removing an undocumented Entity changes references without cr
 test('touch Add Entity documents a missing dependency and validates names without losing work', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true, hasTouch: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit', hasTouch: true });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"Report","dependencies":["Missing"]}]}');
     await page.locator('#open-paste').click();
@@ -181,7 +209,7 @@ test('touch Add Entity documents a missing dependency and validates names withou
 test('a new Entity draft is protected when selecting another Entity', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -208,7 +236,7 @@ test('a new Entity draft is protected when selecting another Entity', async () =
 test('contextual Entity changes and deletion choices preserve references and undo independently', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     const original = {
       entities: [
@@ -264,7 +292,7 @@ test('contextual Entity changes and deletion choices preserve references and und
 test('theme follows the system until an explicit choice is made', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ colorScheme: 'light', offline: true });
+    const context = await newContext(browser, { colorScheme: 'light', offline: browserName !== 'webkit' });
     const page = await context.newPage();
     await page.goto(viewer);
     const theme = page.getByLabel('Theme');
@@ -279,7 +307,9 @@ test('theme follows the system until an explicit choice is made', async () => {
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     await page.emulateMedia({ colorScheme: 'light' });
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    await page.waitForFunction(() => !window.matchMedia('(prefers-color-scheme: dark)').matches);
     await theme.selectOption('system');
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
   } finally {
     await browser.close();
@@ -289,7 +319,7 @@ test('theme follows the system until an explicit choice is made', async () => {
 test('theme text and essential controls meet contrast targets', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -316,7 +346,7 @@ test('theme text and essential controls meet contrast targets', async () => {
 test('dark theme renders readable workspace surfaces and controls offline', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page.getByLabel('Theme').selectOption('dark');
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
@@ -345,8 +375,8 @@ test('dark theme renders readable workspace surfaces and controls offline', asyn
 test('dark graph and white PNG retain colour rules, connections and selection', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({
-      offline: true,
+    const page = await newPage(browser, {
+      offline: browserName !== 'webkit',
       acceptDownloads: true,
       viewport: { width: 1200, height: 900 },
     });
@@ -420,7 +450,7 @@ test('dark graph and white PNG retain colour rules, connections and selection', 
 test('theme preference persists without storing Documents and survives unavailable browser APIs', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ colorScheme: 'dark', offline: true });
+    const context = await newContext(browser, { colorScheme: 'dark', offline: browserName !== 'webkit' });
     const page = await context.newPage();
     await page.goto(viewer);
     await page.evaluate(() => localStorage.clear());
@@ -436,7 +466,7 @@ test('theme preference persists without storing Documents and survives unavailab
     assert.equal(await page.getByLabel('Theme').inputValue(), 'system');
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
 
-    const blocked = await browser.newContext({ offline: true });
+    const blocked = await newContext(browser, { offline: browserName !== 'webkit' });
     await blocked.addInitScript(`
       Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
       Object.defineProperty(window, 'matchMedia', { value: undefined });
@@ -477,7 +507,7 @@ test('theme preference persists without storing Documents and survives unavailab
 test('switching themes preserves Document settings, history and session state', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     const original = {
       entities: [{ name: 'bronze A', dependencies: [] }],
@@ -528,7 +558,7 @@ test('switching themes preserves Document settings, history and session state', 
 test('opening a graph works when system preference queries throw', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ offline: true });
+    const context = await newContext(browser, { offline: browserName !== 'webkit' });
     await context.addInitScript(`window.matchMedia = () => { throw new Error('unavailable'); };`);
     const page = await context.newPage();
     await page.goto(viewer);
@@ -547,7 +577,7 @@ test('opening a graph works when system preference queries throw', async () => {
 test('opens in View and enables Document editing only in Edit', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -570,7 +600,7 @@ test('opens in View and enables Document editing only in Edit', async () => {
 test('resolves JSON drafts before leaving Edit without saving', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -603,7 +633,7 @@ test('resolves JSON drafts before leaving Edit without saving', async () => {
 test('resolves contextual drafts and protects invalid drafts when switching modes', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -634,7 +664,7 @@ test('resolves contextual drafts and protects invalid drafts when switching mode
 test('resolves property and new Entity drafts without merging conflicting work', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -661,7 +691,7 @@ test('resolves property and new Entity drafts without merging conflicting work',
 test('preserves work on failed opens and resets mode, history and navigation on reopening', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ acceptDownloads: true });
+    const page = await newPage(browser, { acceptDownloads: true });
     await page.goto(viewer);
     const file = {
       name: 'same.json',
@@ -729,7 +759,7 @@ test('preserves work on failed opens and resets mode, history and navigation on 
 test('opens a pasted Document in the standalone viewer offline', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ offline: true });
+    const context = await newContext(browser, { offline: browserName !== 'webkit' });
     const page = await context.newPage();
     const externalRequests = trackExternalRequests(page);
     await page.goto(viewer);
@@ -746,7 +776,7 @@ test('edits and downloads a Document that can be uploaded offline with metadata 
   const browser = await chromium.launch({ headless: true });
   const downloadedPath = path.resolve('.tmp/browser-document.json');
   try {
-    const context = await browser.newContext({ offline: true, acceptDownloads: true });
+    const context = await newContext(browser, { offline: browserName !== 'webkit', acceptDownloads: true });
     const page = await context.newPage();
     const externalRequests = trackExternalRequests(page);
     await page.goto(viewer);
@@ -807,7 +837,7 @@ test('edits and downloads a Document that can be uploaded offline with metadata 
 test('keeps form drafts visible and blocks download and selection until resolved', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ offline: true });
+    const context = await newContext(browser, { offline: browserName !== 'webkit' });
     const page = await context.newPage();
     await page.goto(viewer);
     await page
@@ -842,7 +872,7 @@ test('keeps form drafts visible and blocks download and selection until resolved
 test('protects invalid drafts and unsaved changes while supporting undo and redo', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ offline: true });
+    const context = await newContext(browser, { offline: browserName !== 'webkit' });
     const page = await context.newPage();
     const externalRequests = trackExternalRequests(page);
     await page.goto(viewer);
@@ -900,8 +930,8 @@ test('protects invalid drafts and unsaved changes while supporting undo and redo
 test('exposes safe details by keyboard and tooltip and retains graph views and PNG export', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({
-      offline: true,
+    const context = await newContext(browser, {
+      offline: browserName !== 'webkit',
       acceptDownloads: true,
       viewport: { width: 1440, height: 1100 },
     });
@@ -923,7 +953,7 @@ test('exposes safe details by keyboard and tooltip and retains graph views and P
     await openFind(page);
     await page.locator('#entity-search').fill('Report');
     await page.locator('#entity-search').focus();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     assert.equal(
       await page.locator('#entity-results button[title="Report"]').evaluate((el) => el === document.activeElement),
       true,
@@ -952,7 +982,7 @@ test('exposes safe details by keyboard and tooltip and retains graph views and P
 test('graph-first workspace keeps controls floating and supports an empty Document', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    const page = await newPage(browser, { viewport: { width: 1200, height: 800 } });
     await page.goto(viewer);
     assert.equal(await page.getByText('Open a Document', { exact: true }).isVisible(), true);
     await page.locator('#paste-json').fill('{"entities":[]}');
@@ -975,7 +1005,7 @@ test('graph-first workspace keeps controls floating and supports an empty Docume
 test('graph edits preserve the filter and dependency view', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill(
       JSON.stringify({
@@ -1017,7 +1047,7 @@ test('graph edits preserve the filter and dependency view', async () => {
 test('Find and Filter are separate and preserve dependency view semantics', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1050,7 +1080,7 @@ test('Find and Filter are separate and preserve dependency view semantics', asyn
 test('narrow screens keep File and graph controls reachable', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+    const page = await newPage(browser, { viewport: { width: 375, height: 812 } });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -1076,7 +1106,7 @@ test('narrow screens keep File and graph controls reachable', async () => {
 test('Filter is a temporary surface with an active label and clear action', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"One","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -1097,7 +1127,7 @@ test('Filter is a temporary surface with an active label and clear action', asyn
 test('narrow-screen Settings and Filter remain usable', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+    const page = await newPage(browser, { viewport: { width: 375, height: 812 } });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -1123,7 +1153,7 @@ test('narrow-screen Settings and Filter remain usable', async () => {
 test('File opens the spacious JSON surface and copy fallback', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[]}');
     await page.locator('#open-paste').click();
@@ -1144,7 +1174,7 @@ test('File opens the spacious JSON surface and copy fallback', async () => {
 test('opens persistent Entity details from Find and closes them', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1165,10 +1195,48 @@ test('opens persistent Entity details from Find and closes them', async () => {
   }
 });
 
+test('unfocused button activation restores the invoker and focuses keyboard movement controls', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    const result = page.locator('#entity-results button[title="A"]');
+    await page.locator('#entity-search').focus();
+    await result.dispatchEvent('click');
+    const card = page.locator('#inspector');
+    const moveCard = page.locator('#move-inspector');
+    const cardBefore = await card.boundingBox();
+    await moveCard.dispatchEvent('click');
+    assert.equal(await moveCard.evaluate((element) => element === document.activeElement), true);
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    assert.ok(cardBefore && (await card.boundingBox())!.y < cardBefore.y);
+    const node = page.getByRole('button', { name: 'Inspect Entity A', exact: true });
+    const nodeBefore = await node.boundingBox();
+    const moveEntity = page.locator('#move-entity');
+    await moveEntity.dispatchEvent('click');
+    assert.equal(await moveEntity.evaluate((element) => element === document.activeElement), true);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    assert.ok(nodeBefore && (await node.boundingBox())!.x > nodeBefore.x);
+    await page.getByRole('button', { name: 'Close Entity details' }).click();
+    assert.equal(await result.evaluate((element) => element === document.activeElement), true);
+    await page.locator('#entity-search').focus();
+    await node.dispatchEvent('click');
+    await page.getByRole('button', { name: 'Close Entity details' }).click();
+    assert.equal(await node.evaluate((element) => element === document.activeElement), true);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('moves details by keyboard and updates in place until closed', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1197,7 +1265,7 @@ test('moves details by keyboard and updates in place until closed', async () => 
 test('protects Entity drafts when another Entity is explicitly selected', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1222,7 +1290,7 @@ test('protects Entity drafts when another Entity is explicitly selected', async 
 test('keyboard Entity controls open details without hover', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":["missing"]}]}');
     await page.locator('#open-paste').click();
@@ -1240,7 +1308,7 @@ test('keyboard Entity controls open details without hover', async () => {
 test('opens property editing for the inspected Entity', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1260,7 +1328,7 @@ test('opens property editing for the inspected Entity', async () => {
 test('touch inspection works with hover previews disabled and the card can be dragged', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ hasTouch: true, viewport: { width: 1200, height: 900 } });
+    const context = await newContext(browser, { hasTouch: true, viewport: { width: 1200, height: 900 } });
     const page = await context.newPage();
     await page.goto(viewer);
     await page
@@ -1277,16 +1345,23 @@ test('touch inspection works with hover previews disabled and the card can be dr
     const before = await card.boundingBox();
     const header = await card.locator('.inspector-header').boundingBox();
     assert.ok(before && header);
-    const cdp = await context.newCDPSession(page);
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchStart',
-      touchPoints: [{ x: header.x + 15, y: header.y + 15 }],
-    });
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{ x: header.x - 45, y: header.y + 55 }],
-    });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    if (browserName === 'chromium') {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: header.x + 15, y: header.y + 15 }],
+      });
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: header.x - 45, y: header.y + 55 }],
+      });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else {
+      await page.mouse.move(header.x + 15, header.y + 15);
+      await page.mouse.down();
+      await page.mouse.move(header.x - 45, header.y + 55);
+      await page.mouse.up();
+    }
     const after = await card.boundingBox();
     assert.ok(after && (after.x !== before.x || after.y !== before.y));
   } finally {
@@ -1297,7 +1372,7 @@ test('touch inspection works with hover previews disabled and the card can be dr
 test('keeps moved card position after applying an Entity edit', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -1321,7 +1396,7 @@ test('keeps moved card position after applying an Entity edit', async () => {
 test('moved card protects Direct dependency drafts from automatic inspection and applies before switching', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const page = await newPage(browser);
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1350,7 +1425,7 @@ test('moved card protects Direct dependency drafts from automatic inspection and
 test('offers searchable existing Entities and exact undocumented dependency names', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1369,7 +1444,7 @@ test('offers searchable existing Entities and exact undocumented dependency name
       ['Report', 'Source'],
     );
     await input.fill('Source');
-    await input.press('Enter');
+    await page.getByRole('button', { name: 'Add dependency', exact: true }).click();
     await page.getByLabel('Direct dependency name').fill('External');
     await page.getByLabel('Direct dependency name').press('Enter');
     const saved = JSON.parse(await page.locator('#document-json').inputValue());
@@ -1386,7 +1461,7 @@ test('offers searchable existing Entities and exact undocumented dependency name
 test('connects only from dependency right handle to dependent left handle', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, offline: true });
+    const page = await newPage(browser, { viewport: { width: 1400, height: 900 }, offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1438,7 +1513,7 @@ test('connects only from dependency right handle to dependent left handle', asyn
 test('selects and removes a graph relationship including repeated entries, with undo', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, offline: true });
+    const page = await newPage(browser, { viewport: { width: 1400, height: 900 }, offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1469,7 +1544,7 @@ test('selects and removes a graph relationship including repeated entries, with 
 test('rejects invalid connections and protects drafts for both editing paths', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, offline: true });
+    const page = await newPage(browser, { viewport: { width: 1400, height: 900 }, offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1483,7 +1558,7 @@ test('rejects invalid connections and protects drafts for both editing paths', a
     await openFind(page);
     await page.locator('#entity-results button[title="Report"]').click();
     await page.getByLabel('Direct dependency name').fill('Source');
-    await page.getByLabel('Direct dependency name').press('Enter');
+    await page.getByRole('button', { name: 'Add dependency', exact: true }).click();
     assert.match((await page.locator('#dependency-error').textContent())!, /already exists/i);
     await page.getByLabel('Direct dependency name').fill(' Source');
     await page.getByLabel('Direct dependency name').press('Enter');
@@ -1516,7 +1591,7 @@ test('rejects invalid connections and protects drafts for both editing paths', a
 test('touch users can add an undocumented dependency using the details form', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ hasTouch: true, offline: true });
+    const context = await newContext(browser, { hasTouch: true, offline: browserName !== 'webkit' });
     const page = await context.newPage();
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"Report","dependencies":[]}]}');
@@ -1538,7 +1613,7 @@ test('touch users can add an undocumented dependency using the details form', as
 test('hover updates a moved card without announcing each inspection', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+    const page = await newPage(browser, { viewport: { width: 1400, height: 900 } });
     await page.goto(viewer);
     await page
       .locator('#paste-json')
@@ -1568,7 +1643,7 @@ test('hover updates a moved card without announcing each inspection', async () =
 test('canvas keyboard navigation pans and zooms without intercepting text entry offline', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true, viewport: { width: 1200, height: 900 } });
+    const page = await newPage(browser, { offline: browserName !== 'webkit', viewport: { width: 1200, height: 900 } });
     const requests = trackExternalRequests(page);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"Alpha","dependencies":[]}]}');
@@ -1601,8 +1676,8 @@ test('canvas keyboard navigation pans and zooms without intercepting text entry 
 test('moving an Entity by keyboard is transient in View and Edit and can be cancelled', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({
-      offline: true,
+    const page = await newPage(browser, {
+      offline: browserName !== 'webkit',
       acceptDownloads: true,
       viewport: { width: 1200, height: 900 },
     });
@@ -1645,7 +1720,7 @@ test('moving an Entity by keyboard is transient in View and Edit and can be canc
 test('Find centers an Entity while keeping the All view graph visible', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    const page = await newPage(browser, { viewport: { width: 1200, height: 900 } });
     await page.goto(viewer);
     const entities = Array.from({ length: 10 }, (_, index) => ({
       name: `Node${index}`,
@@ -1669,7 +1744,7 @@ test('Find centers an Entity while keeping the All view graph visible', async ()
 test('Find and related Entity links center offscreen documented and undocumented Entities by keyboard', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true, viewport: { width: 1200, height: 900 } });
+    const page = await newPage(browser, { offline: browserName !== 'webkit', viewport: { width: 1200, height: 900 } });
     const requests = trackExternalRequests(page);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"model.Alpha","dependencies":["source.Missing"]}]}');
@@ -1714,7 +1789,7 @@ test('Find and related Entity links center offscreen documented and undocumented
 test('moving an Entity preserves unsaved Document changes and does not add undo history', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ offline: true });
+    const page = await newPage(browser, { offline: browserName !== 'webkit' });
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
@@ -1741,7 +1816,11 @@ test('moving an Entity preserves unsaved Document changes and does not add undo 
 test('narrow touch layout keeps navigation and form editing reachable without dragging', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ offline: true, viewport: { width: 390, height: 844 }, hasTouch: true });
+    const context = await newContext(browser, {
+      offline: browserName !== 'webkit',
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+    });
     const page = await context.newPage();
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');

@@ -33,6 +33,8 @@ npm run test:browser
 
 The browser suite opens the built HTML via `file://` in a fresh headless profile with networking disabled. It exercises paste, upload, editing, validation, warnings, download/reload, keyboard access, tooltips, graph views and PNG export; no server or shared browser profile is used. `.tmp/` can be removed after testing.
 
+For supplementary Playwright WebKit coverage, install its browser with `npx playwright install webkit` and run `BROWSER=webkit npm run test:browser`. WebKit's offline emulation cannot navigate `file://`, so the suite instead blocks and fails on external requests. Playwright does not provide portable touch-drag input: WebKit tests touch inspection and mouse dragging, while Chromium additionally exercises touch dragging. WebKit is not a substitute for testing current Safari as described in the viewer guide.
+
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE). It originated from [dbt Docs](https://github.com/dbt-labs/dbt-docs); a former CI sample was derived from [jaffle_shop](https://github.com/dbt-labs/jaffle_shop). The standalone viewer includes third-party software; its license notices are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) and embedded in the generated HTML. Update those notices when bundled dependencies change.
