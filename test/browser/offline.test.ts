@@ -1281,6 +1281,194 @@ test('moved card protects Direct dependency drafts from automatic inspection and
   }
 });
 
+test('offers searchable existing Entities and exact undocumented dependency names', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ offline: true });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"Report","dependencies":[]},{"name":"Source","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="Report"]').click();
+    const input = page.getByLabel('Direct dependency name');
+    const list = await input.getAttribute('list');
+    assert.ok(list);
+    assert.deepEqual(
+      await page
+        .locator(`#${list} option`)
+        .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)),
+      ['Report', 'Source'],
+    );
+    await input.fill('Source');
+    await input.press('Enter');
+    await page.getByLabel('Direct dependency name').fill('External');
+    await page.getByLabel('Direct dependency name').press('Enter');
+    const saved = JSON.parse(await page.locator('#document-json').inputValue());
+    assert.deepEqual(saved.entities, [
+      { name: 'Report', dependencies: ['Source', 'External'] },
+      { name: 'Source', dependencies: [] },
+    ]);
+    assert.match((await page.locator('#graph-summary').textContent())!, /External \(undocumented\)/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('connects only from dependency right handle to dependent left handle', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, offline: true });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"Source","dependencies":[]},{"name":"Report","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.getByLabel('Start dependency from Source').isVisible(), false);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const start = page.getByLabel('Start dependency from Source');
+    const target = page.getByLabel('Connect to dependent Report');
+    const sourceBox = (await start.boundingBox())!;
+    const targetBox = (await target.boundingBox())!;
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(20, 200);
+    await page.mouse.up();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.keyboard.press('Escape');
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+    await page.mouse.up();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.up();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointercancel')));
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+    await page.mouse.up();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await start.dragTo(target);
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, [
+      'Source',
+    ]);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, [
+      'Source',
+    ]);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('selects and removes a graph relationship including repeated entries, with undo', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, offline: true });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"Source","dependencies":[]},{"name":"Report","dependencies":["Source","Source"]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const start = (await page.getByLabel('Start dependency from Source').boundingBox())!;
+    const end = (await page.getByLabel('Connect to dependent Report').boundingBox())!;
+    await page.mouse.click((start.x + end.x + start.width) / 2, (start.y + end.y + start.height) / 2);
+    const remove = page.getByRole('button', { name: 'Remove Direct dependency Source from Report' });
+    assert.equal(await remove.isVisible(), true);
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, [
+      'Source',
+      'Source',
+    ]);
+    await remove.click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, [
+      'Source',
+      'Source',
+    ]);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('rejects invalid connections and protects drafts for both editing paths', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, offline: true });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"Source","dependencies":[]},{"name":"Report","dependencies":["Source","Source"]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByLabel('Start dependency from Source').dragTo(page.getByLabel('Connect to dependent Report'));
+    assert.match((await page.locator('#connection-status').textContent())!, /already exists/i);
+    await page.getByLabel('Start dependency from Report').dragTo(page.getByLabel('Connect to dependent Source'));
+    assert.match((await page.locator('#connection-status').textContent())!, /cycle/i);
+    await openFind(page);
+    await page.locator('#entity-results button[title="Report"]').click();
+    await page.getByLabel('Direct dependency name').fill('Source');
+    await page.getByLabel('Direct dependency name').press('Enter');
+    assert.match((await page.locator('#dependency-error').textContent())!, /already exists/i);
+    await page.getByLabel('Direct dependency name').fill(' Source');
+    await page.getByLabel('Direct dependency name').press('Enter');
+    assert.match((await page.locator('#dependency-error').textContent())!, /whitespace/i);
+    await page.locator('#discard-dependency-draft').click();
+    await page.getByRole('button', { name: 'Close Entity details' }).click();
+    await page.getByRole('button', { name: 'Reset to fit' }).click();
+    await page.locator('#add-entity-panel summary').click();
+    await page.locator('#new-entity-name').fill('Draft');
+    await page.getByLabel('Start dependency from Report').dragTo(page.getByLabel('Connect to dependent Source'));
+    assert.match((await page.locator('#connection-status').textContent())!, /apply or discard/i);
+    await page.locator('#discard-new-entity-draft').click();
+    await page.locator('#add-entity-panel summary').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="Report"]').click();
+    await page.getByRole('button', { name: 'Remove Direct dependency Source', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, [
+      'Source',
+      'Source',
+    ]);
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('touch users can add an undocumented dependency using the details form', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ hasTouch: true, offline: true });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"Report","dependencies":[]}]}');
+    await page.locator('#open-paste').tap();
+    await page.getByRole('button', { name: 'Edit', exact: true }).tap();
+    await page.locator('#entity-list summary').tap();
+    await page.locator('#entity-results button[title="Report"]').tap();
+    await page.getByLabel('Direct dependency name').fill('Remote');
+    await page.getByRole('button', { name: 'Add dependency', exact: true }).tap();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
+      { name: 'Report', dependencies: ['Remote'] },
+    ]);
+    assert.match((await page.locator('#graph-summary').textContent())!, /Remote \(undocumented\)/);
+  } finally {
+    await browser.close();
+  }
+});
+
 test('hover updates a moved card without announcing each inspection', async () => {
   const browser = await chromium.launch({ headless: true });
   try {

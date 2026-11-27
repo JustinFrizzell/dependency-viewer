@@ -266,6 +266,8 @@ export function setupEntityInspection({
         documentEdits.editDependency(session, name, dependency, add);
         dependencyDraft = null;
         refreshDocument(name);
+        (document.getElementById('connection-status') as HTMLElement).textContent =
+          `${add ? 'Added' : 'Removed'} ${dependency} as a Direct dependency of ${name}.`;
         (document.getElementById('new-dependency-name') as HTMLInputElement).focus();
       } catch (problem) {
         if (add && validating) dependencyRejected = true;
@@ -292,7 +294,15 @@ export function setupEntityInspection({
       input.id = 'new-dependency-name';
       input.type = 'text';
       input.autocomplete = 'off';
+      input.setAttribute('list', 'dependency-candidates');
       input.setAttribute('aria-describedby', 'dependency-error');
+      const candidates = document.createElement('datalist');
+      candidates.id = 'dependency-candidates';
+      for (const candidate of entities.values()) {
+        const option = document.createElement('option');
+        option.value = candidate.name;
+        candidates.appendChild(option);
+      }
       const submit = document.createElement('button');
       submit.type = 'submit';
       submit.textContent = 'Add dependency';
@@ -307,7 +317,7 @@ export function setupEntityInspection({
         dependencyError.textContent = '';
         updateDocumentControls();
       });
-      form.append(label, input, submit, discard, dependencyError);
+      form.append(label, input, candidates, submit, discard, dependencyError);
       form.addEventListener('input', () => {
         dependencyRejected = false;
         dependencyError.textContent = '';

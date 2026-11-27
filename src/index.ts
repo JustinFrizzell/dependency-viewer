@@ -195,7 +195,9 @@ function updateDocumentControls() {
   if (editor.value !== session.draft()) editor.value = session.draft();
   editor.disabled = formDraft;
   editor.readOnly = mode === 'view';
+  const modeChanged = document.body.dataset.mode !== mode;
   document.body.dataset.mode = mode;
+  if (modeChanged) document.dispatchEvent(new Event('modechange'));
   (document.getElementById('mode-view') as HTMLButtonElement).setAttribute('aria-pressed', String(mode === 'view'));
   (document.getElementById('mode-edit') as HTMLButtonElement).setAttribute('aria-pressed', String(mode === 'edit'));
   (document.getElementById('mode-edit') as HTMLButtonElement).disabled = false;

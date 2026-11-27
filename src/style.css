@@ -918,6 +918,34 @@ main {
   inset: 0;
   pointer-events: none;
 }
+.connection-handle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid #006e64;
+  border-radius: 50%;
+  background: white;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+.connection-handle[hidden] {
+  display: none;
+}
+#connection-status:not(:empty) {
+  position: absolute;
+  bottom: 52px;
+  left: 12px;
+  padding: 8px;
+  background: #fff;
+  color: #172b3a;
+}
+#relationship-actions:not([hidden]) {
+  position: absolute;
+  z-index: 4;
+}
 .graph-entity {
   position: absolute;
   transform: translate(-50%, -50%);
