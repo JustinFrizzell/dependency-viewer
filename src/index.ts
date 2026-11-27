@@ -14,6 +14,15 @@ const filePanel = document.getElementById('file-panel') as HTMLElement;
 const mainTemplate = document.querySelector('main')!.cloneNode(true);
 const footerTemplate = document.querySelector('footer')!.cloneNode(true);
 (document.getElementById('status') as HTMLElement).textContent = 'Choose a JSON file to view dependencies.';
+const header = document.querySelector('header')!;
+let toolbarObserver: ResizeObserver | undefined;
+function positionSurfaces() {
+  const top = header.getBoundingClientRect().bottom + 8;
+  const toolbar = document.querySelector<HTMLElement>('.workspace-toolbar');
+  document.documentElement.style.setProperty('--toolbar-top', `${top}px`);
+  document.documentElement.style.setProperty('--editor-top', `${top + (toolbar?.offsetHeight || 0) + 8}px`);
+}
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(positionSurfaces).observe(header);
 let cleanupGraph = () => {};
 let resizeGraph = () => {};
 let selection = 0;
@@ -97,7 +106,12 @@ function openDocument(raw: string, name: string) {
   }
   inspection = null;
   newEntityRejected = false;
+  document.body.dataset.loaded = 'true';
   documentName = name;
+  (document.getElementById('document-name') as HTMLElement).textContent = name;
+  (document.getElementById('document-name') as HTMLElement).title = name;
+  (document.getElementById('open-prompt') as HTMLElement).hidden = true;
+  (document.getElementById('file-document-actions') as HTMLElement).hidden = false;
   (document.getElementById('add-entity-form') as HTMLFormElement).reset();
   resetMetadata();
   updateDocumentControls();
@@ -115,32 +129,34 @@ function openDocument(raw: string, name: string) {
 function renderGraph(graph: Graph, selectedName?: string) {
   cleanupGraph();
   inspection = null;
+  toolbarObserver?.disconnect();
   document.querySelector('main')!.replaceWith(mainTemplate.cloneNode(true));
+  if (typeof ResizeObserver !== 'undefined') {
+    const toolbar = document.querySelector('.workspace-toolbar')!;
+    toolbarObserver = new ResizeObserver(positionSurfaces);
+    toolbarObserver.observe(toolbar);
+  }
   document.querySelector('footer')!.replaceWith(footerTemplate.cloneNode(true));
   displayedGraph = JSON.stringify(graph);
-  filePanel.hidden = graph.entities.length > 0;
+  filePanel.hidden = true;
   (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute(
     'aria-expanded',
     String(!filePanel.hidden),
   );
-  if (graph.entities.length) {
-    const navigation = showGraph(graph, selectedName, {
-      session: session!,
-      setupDocumentSettings,
-      tooltipsEnabled: () => presentationControls.tooltipsEnabled(),
-      requireNoConflictingFormDraft,
-      updateDocumentControls,
-      refreshDocument,
-    });
-    inspection = navigation.inspection;
-    cleanupGraph = navigation.cleanup;
-    resizeGraph = navigation.resize;
-  } else {
-    cleanupGraph = () => {};
-    resizeGraph = () => {};
+  const navigation = showGraph(graph, selectedName, {
+    session: session!,
+    setupDocumentSettings,
+    tooltipsEnabled: () => presentationControls.tooltipsEnabled(),
+    requireNoConflictingFormDraft,
+    updateDocumentControls,
+    refreshDocument,
+  });
+  if (!graph.entities.length) {
     (document.getElementById('status') as HTMLElement).textContent = 'No entities in this dependency dataset.';
-    setupDocumentSettings({ nodes: () => [] } as unknown as cytoscape.Core);
   }
+  inspection = navigation.inspection;
+  cleanupGraph = navigation.cleanup;
+  resizeGraph = navigation.resize;
   updateDocumentControls();
 }
 
@@ -164,6 +180,8 @@ function updateDocumentControls() {
   (document.getElementById('redo-document') as HTMLButtonElement).disabled = !session.canRedo() || formDraft;
   (document.getElementById('download-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
   (document.getElementById('copy-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
+  (document.getElementById('file-copy-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
+  (document.getElementById('file-download-document') as HTMLButtonElement).disabled = session.hasDraft() || formDraft;
   const status = document.getElementById('document-status') as HTMLElement;
   if (formDraft) status.textContent = 'Apply or discard the form draft before saving.';
   else if (status.textContent === 'Apply or discard the form draft before saving.') status.textContent = '';
@@ -503,6 +521,24 @@ fileInput.addEventListener('change', () => {
 fileInput.addEventListener('cancel', () => {
   selection++;
 });
+
+(document.getElementById('file-view-document') as HTMLButtonElement).addEventListener('click', () => {
+  filePanel.hidden = true;
+  (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+  (document.getElementById('document-panel') as HTMLDetailsElement).open = true;
+  (document.getElementById('document-json') as HTMLTextAreaElement).focus();
+});
+
+for (const action of ['copy', 'download']) {
+  document.getElementById(`file-${action}-document`)!.addEventListener('click', () => {
+    if (action === 'copy') {
+      filePanel.hidden = true;
+      (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+      (document.getElementById('document-panel') as HTMLDetailsElement).open = true;
+    }
+    (document.getElementById(`${action}-document`) as HTMLButtonElement).click();
+  });
+}
 
 document.addEventListener('click', (event) => {
   const button = (event.target as Element).closest('#toggle-file-panel');

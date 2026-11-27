@@ -94,7 +94,6 @@ test('new files reset the viewer, while invalid files preserve it', () => {
     loadFile(dom, data, 'first.json');
     assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, true);
     const fileButton = document.getElementById('toggle-file-panel') as HTMLButtonElement;
-    assert.equal((fileButton.previousElementSibling as HTMLElement).dataset.view, 'downstream');
     assert.equal(fileButton.getAttribute('aria-expanded'), 'false');
     fileButton.click();
     assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, false);
@@ -135,13 +134,13 @@ test('new files reset the viewer, while invalid files preserve it', () => {
     assert.doesNotMatch((document.getElementById('graph-summary') as HTMLElement).textContent, /first|second/);
     loadFile(dom, '{"entities":[]}', 'empty.json');
     assert.match((document.getElementById('status') as HTMLElement).textContent, /no entities/i);
-    assert.equal((document.querySelector('.controls') as HTMLElement).hidden, true);
-    assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, false);
+    assert.equal((document.querySelector('.controls') as HTMLElement).hidden, false);
+    assert.equal((document.getElementById('file-panel') as HTMLElement).hidden, true);
     assert.equal(
       (document.getElementById('toggle-file-panel') as HTMLButtonElement).getAttribute('aria-expanded'),
-      'true',
+      'false',
     );
-    assert.equal((document.getElementById('dependency-views') as HTMLElement).hidden, true);
+    assert.equal((document.getElementById('dependency-views') as HTMLElement).hidden, false);
   } finally {
     dom.window.close();
   }
@@ -755,6 +754,7 @@ test('entity list can be collapsed and reopened without losing the search', () =
     const document = dom.window.document;
     const list = document.getElementById('entity-list') as HTMLDetailsElement;
     const search = document.getElementById('entity-search') as HTMLInputElement;
+    (list.querySelector('summary') as HTMLElement).click();
     search.value = 'orders';
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     assert.equal(list.open, true);
