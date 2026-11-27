@@ -9,6 +9,22 @@ fs.mkdirSync('.tmp', { recursive: true });
 process.env.TMPDIR = path.resolve('.tmp');
 const viewer = pathToFileURL(path.resolve('dist/dependency-viewer.html')).href;
 
+async function openFind(page: Page) {
+  const list = page.locator('#entity-list');
+  if (!(await list.evaluate((element: HTMLDetailsElement) => element.open))) await list.locator('summary').click();
+}
+
+async function openFilter(page: Page) {
+  const menu = page.locator('#filter-menu');
+  if (!(await menu.evaluate((element: HTMLDetailsElement) => element.open))) await menu.locator('summary').click();
+}
+
+async function openSettings(page: Page) {
+  const settings = page.locator('#colour-settings');
+  if (!(await settings.evaluate((element: HTMLDetailsElement) => element.open)))
+    await settings.locator('summary').click();
+}
+
 function trackExternalRequests(page: Page) {
   const requests: string[] = [];
   page.on('request', (request) => {
@@ -25,6 +41,7 @@ test('opens in View and enables Document editing only in Edit', async () => {
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
     await page.locator('#document-panel summary').click();
+    await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
     assert.equal(await page.getByRole('button', { name: 'View', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await page.locator('#document-json').isEditable(), false);
@@ -82,6 +99,7 @@ test('resolves contextual drafts and protects invalid drafts when switching mode
       .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
     await page.locator('#open-paste').click();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
     await page.locator('#edit-entity-name').fill('B');
     await page.getByRole('button', { name: 'View', exact: true }).click();
@@ -156,6 +174,7 @@ test('preserves work on failed opens and resets mode, history and navigation on 
     await page.locator('#apply-document').click();
     await page.locator('#undo-document').click();
     assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
+    await openFilter(page);
     await page.locator('#graph-filter').fill('B');
     await page.locator('#document-json').fill('{invalid draft');
     await page.locator('#toggle-file-panel').click();
@@ -234,14 +253,18 @@ test('edits and downloads a Document that can be uploaded offline with metadata 
     });
 
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
     await page.locator('#entity-results button[title="Source"]').click();
     await page.locator('#edit-entity-name').fill('Renamed');
     await page.locator('#edit-entity-description').fill('Updated');
     await page.locator('#edit-entity-form button[type=submit]').click();
+    await openFind(page);
     await page.locator('#entity-results button[title="Report"]').click();
     await page.locator('#new-dependency-name').fill('External');
     await page.locator('#add-dependency-form button[type=submit]').click();
+    await openSettings(page);
     await page.locator('#compact-nodes').check();
+    await page.locator('#colour-settings summary').click();
     await page.locator('#document-panel summary').click();
     assert.match((await page.locator('#unsaved-indicator').textContent())!, /unsaved/i);
     const downloadPromise = page.waitForEvent('download');
@@ -281,9 +304,11 @@ test('keeps form drafts visible and blocks download and selection until resolved
       .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
     await page.locator('#open-paste').click();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
     await page.locator('#edit-entity-name').fill('B');
     assert.equal(await page.locator('#download-document').isDisabled(), true);
+    await openFind(page);
     await page.locator('#entity-results button[title="B"]').click();
     assert.equal(await page.locator('#edit-entity-name').inputValue(), 'B');
     assert.match((await page.locator('#edit-entity-error').textContent())!, /apply or discard/i);
@@ -294,6 +319,7 @@ test('keeps form drafts visible and blocks download and selection until resolved
     assert.equal(await page.locator('#download-document').isDisabled(), true);
     await page.locator('#discard-dependency-draft').click();
     assert.equal(await page.locator('#download-document').isDisabled(), false);
+    await openFind(page);
     await page.locator('#entity-results button[title="B"]').click();
     assert.equal(await page.locator('#selection-status h2').textContent(), 'B');
   } finally {
@@ -313,6 +339,7 @@ test('protects invalid drafts and unsaved changes while supporting undo and redo
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.locator('#document-panel summary').click();
     await page.locator('#document-json').fill('{"entities":[{"name":"B","dependencies":[]}]}');
+    await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
     await page.locator('#edit-entity-name').fill('C');
     await page.locator('#edit-entity-form button[type=submit]').click();
@@ -349,6 +376,7 @@ test('protects invalid drafts and unsaved changes while supporting undo and redo
     await leaveDialog.dismiss();
     await reload;
     assert.equal(await page.locator('#document-json').inputValue(), '{"entities":[],"x":1,"x":2}');
+    await page.locator('#toggle-file-panel').click();
     await page.locator('#discard-document').click();
     assert.equal(await page.locator('#download-document').isDisabled(), false);
     assert.deepEqual(externalRequests, []);
@@ -388,6 +416,7 @@ test('exposes safe details by keyboard and tooltip and retains graph views and P
     }
     assert.match(tooltip, /Description: <img/);
     assert.match(tooltip, /owner: <img/);
+    await openFind(page);
     await page.locator('#entity-search').fill('Report');
     await page.locator('#entity-search').focus();
     await page.keyboard.press('Tab');
@@ -411,6 +440,156 @@ test('exposes safe details by keyboard and tooltip and retains graph views and P
     for await (const chunk of await png.createReadStream()) chunks.push(chunk);
     assert.deepEqual(Buffer.concat(chunks).subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.deepEqual(externalRequests, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('graph-first workspace keeps controls floating and supports an empty Document', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    await page.goto(viewer);
+    assert.equal(await page.getByText('Open a Document', { exact: true }).isVisible(), true);
+    await page.locator('#paste-json').fill('{"entities":[]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.getByText('Open a Document', { exact: true }).isVisible(), false);
+    const graph = (await page.locator('#graph').boundingBox())!;
+    assert.equal(graph.width, 1200);
+    assert.equal(graph.height, 800);
+    assert.equal(await page.getByRole('button', { name: 'File', exact: true }).isVisible(), true);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#add-entity-panel summary').click();
+    await page.locator('#new-entity-name').fill('First');
+    await page.locator('#add-entity-form button[type=submit]').click();
+    assert.match((await page.locator('#graph-summary').textContent())!, /First/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Find and Filter are separate and preserve dependency view semantics', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill(
+        '{"entities":[{"name":"report.Total","dependencies":["source.Missing"]},{"name":"other","dependencies":[]}]}',
+      );
+    await page.locator('#open-paste').click();
+    assert.match((await page.locator('#graph-count').textContent())!, /3 entities.*1 connection/i);
+    assert.equal(await page.getByRole('button', { name: 'Upstream' }).isDisabled(), true);
+    await page.locator('#entity-list summary').click();
+    await page.locator('#entity-search').fill('SOURCE.missing');
+    await openFind(page);
+    await page.locator('#entity-results button[title="source.Missing (undocumented)"]').click();
+    assert.match((await page.locator('#selection-status').textContent())!, /source.Missing/);
+    await page.getByRole('button', { name: 'Downstream' }).click();
+    await openFilter(page);
+    await page.locator('#graph-filter').fill('TOTAL');
+    assert.match((await page.locator('#graph-summary').textContent())!, /report.Total/);
+    assert.doesNotMatch((await page.locator('#graph-summary').textContent())!, /source.Missing/);
+    await page.getByRole('button', { name: 'Clear graph filter' }).click();
+    assert.match((await page.locator('#graph-summary').textContent())!, /source.Missing/);
+    await page.getByRole('button', { name: 'All', exact: true }).click();
+    assert.match((await page.locator('#graph-summary').textContent())!, /other/);
+    assert.match((await page.locator('#selection-status').textContent())!, /source.Missing/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('narrow screens keep File and graph controls reachable', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    assert.equal(await page.locator('#file-copy-document').isVisible(), true);
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('#add-entity-panel summary').click();
+    await page.locator('#new-entity-name').fill('B');
+    await page.locator('#add-entity-form button[type=submit]').click();
+    assert.match((await page.locator('#graph-summary').textContent())!, /B/);
+    await page.locator('#add-entity-panel summary').click();
+    await page.locator('#entity-list summary').click();
+    await page.locator('#entity-search').fill('A');
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    assert.match((await page.locator('#selection-status').textContent())!, /A/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Filter is a temporary surface with an active label and clear action', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"One","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.locator('#graph-filter').isVisible(), false);
+    await page.locator('#filter-menu summary').click();
+    await page.locator('#graph-filter').fill(' One ');
+    assert.match((await page.locator('#filter-menu summary').textContent())!, /One/);
+    await page.locator('#filter-menu summary').click();
+    assert.equal(await page.locator('#graph-filter').isVisible(), false);
+    await page.locator('#filter-menu summary').click();
+    await page.getByRole('button', { name: 'Clear graph filter' }).click();
+    assert.doesNotMatch((await page.locator('#filter-menu summary').textContent())!, /One/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('narrow-screen Settings and Filter remain usable', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openSettings(page);
+    const settingsBounds = (await page.locator('.colour-settings-content').boundingBox())!;
+    assert.ok(settingsBounds.x >= 0 && settingsBounds.x + settingsBounds.width <= 375);
+    await page.locator('#compact-nodes').check();
+    await page.locator('#colour-settings summary').click();
+    await openFilter(page);
+    const filterBounds = (await page.locator('.filter-menu-content').boundingBox())!;
+    assert.ok(filterBounds.x >= 0 && filterBounds.x + filterBounds.width <= 375);
+    await page.locator('#graph-filter').fill('A');
+    await page.getByRole('button', { name: 'Clear graph filter' }).click();
+    await page.locator('#filter-menu summary').click();
+    await page.locator('#export-menu summary').click();
+    assert.equal(await page.locator('#export-png').isEnabled(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('File opens the spacious JSON surface and copy fallback', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('button', { name: 'View Document JSON' }).click();
+    assert.equal(await page.locator('#document-json').isVisible(), true);
+    assert.equal(await page.locator('#document-json').isEditable(), false);
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
+    await page.locator('#file-copy-document').click();
+    assert.equal(await page.locator('#document-json').isVisible(), true);
+    assert.match((await page.locator('#document-status').textContent())!, /select and copy/i);
   } finally {
     await browser.close();
   }

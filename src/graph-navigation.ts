@@ -177,6 +177,8 @@ export function showGraph(
   const views = document.getElementById('dependency-views') as HTMLElement;
   const graphFilter = document.getElementById('graph-filter') as HTMLInputElement;
   const filterStatus = document.getElementById('graph-filter-status') as HTMLElement;
+  const clearFilterButton = document.getElementById('clear-graph-filter') as HTMLButtonElement;
+  const graphCount = document.getElementById('graph-count') as HTMLElement;
   const viewButtons = [...views.querySelectorAll<HTMLButtonElement>('[data-view]')];
   let selected: string | null = null;
   let view: string | undefined = 'all';
@@ -228,6 +230,12 @@ export function showGraph(
         .map((edge) => `${edge.source} → ${edge.target}`)
         .join(', ') || 'none');
     filterStatus.textContent = query && !visible.size ? 'No matching entities.' : '';
+    clearFilterButton.hidden = !graphFilter.value;
+    const activeFilter = document.getElementById('active-filter') as HTMLElement;
+    activeFilter.textContent = graphFilter.value.trim();
+    activeFilter.title = graphFilter.value.trim();
+    const connections = data.edges.filter((edge) => visible.has(edge.source) && visible.has(edge.target)).length;
+    graphCount.textContent = `${visible.size} ${visible.size === 1 ? 'Entity' : 'Entities'} · ${connections} ${connections === 1 ? 'connection' : 'connections'}`;
     imageExport.update();
     for (const button of viewButtons) {
       button.disabled = button.dataset.view !== 'all' && selected === null;
@@ -236,6 +244,11 @@ export function showGraph(
     if (fit && visible.size) graph.fit(graph.elements().not('.filtered-out'), 45);
   }
   graphFilter.addEventListener('input', () => updateView(true));
+  clearFilterButton.addEventListener('click', () => {
+    graphFilter.value = '';
+    updateView(true);
+    graphFilter.focus();
+  });
   for (const button of viewButtons) {
     button.addEventListener('click', () => {
       view = button.dataset.view;
