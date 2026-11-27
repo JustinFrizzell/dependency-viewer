@@ -5,6 +5,7 @@ import { dependencyEdgeStyle } from './edge-style';
 import { readPresentationSettings } from './presentation-settings';
 import { setupImageExport } from './export-image';
 import { setupEntityInspection } from './entity-inspection';
+import { editDependency } from './document-edits';
 import type { DocumentSession } from './document-session';
 import type { Graph } from './document-types';
 
@@ -101,6 +102,10 @@ export function showGraph(
         'line-color': dark ? '#a6c1c7' : '#607d87',
         'target-arrow-color': dark ? '#a6c1c7' : '#607d87',
       },
+    },
+    {
+      selector: 'edge.inspected',
+      style: { 'line-color': dark ? '#65ddca' : '#087c72', 'target-arrow-color': dark ? '#65ddca' : '#087c72' },
     },
     { selector: '.filtered-out', style: { display: 'none' } },
   ];
@@ -304,6 +309,81 @@ export function showGraph(
   const viewButtons = [...views.querySelectorAll<HTMLButtonElement>('[data-view]')];
   const graphEntities = document.getElementById('graph-entities') as HTMLElement;
   const entityButtons = new Map<string, HTMLButtonElement>();
+  const handles = new Map<string, { source: HTMLButtonElement; target: HTMLButtonElement }>();
+  const connectionStatus = document.getElementById('connection-status') as HTMLElement;
+  const relationshipActions = document.getElementById('relationship-actions') as HTMLElement;
+  const removeRelationship = document.getElementById('remove-relationship') as HTMLButtonElement;
+  let selectedRelationship: { source: string; target: string } | null = null;
+  function clearRelationship() {
+    selectedRelationship = null;
+    relationshipActions.hidden = true;
+    graph.edges().removeClass('inspected');
+  }
+  function onModeChange() {
+    cancelConnection();
+    clearRelationship();
+  }
+  document.addEventListener('modechange', onModeChange);
+  graph.on('tap', (event) => {
+    if (event.target === graph || event.target.isNode()) clearRelationship();
+  });
+  graph.on('tap', 'edge', (event) => {
+    if (document.body.dataset.mode !== 'edit') return;
+    const edge = event.target as cytoscape.EdgeSingular;
+    selectedRelationship = { source: edge.source().data('name'), target: edge.target().data('name') };
+    graph.edges().removeClass('inspected');
+    edge.addClass('inspected');
+    removeRelationship.textContent = `Remove Direct dependency ${selectedRelationship.source} from ${selectedRelationship.target}`;
+    relationshipActions.style.left = `${Math.max(0, Math.min(graph.width() - 260, event.renderedPosition.x))}px`;
+    relationshipActions.style.top = `${Math.max(0, Math.min(graph.height() - 45, event.renderedPosition.y))}px`;
+    relationshipActions.hidden = false;
+  });
+  removeRelationship.addEventListener('click', () => {
+    if (!selectedRelationship || document.body.dataset.mode !== 'edit') return;
+    const { source, target } = selectedRelationship;
+    try {
+      requireNoConflictingFormDraft();
+      if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
+      editDependency(session, target, source, false);
+      refreshDocument(target);
+      (document.getElementById('connection-status') as HTMLElement).textContent =
+        `Removed ${source} as a Direct dependency of ${target}.`;
+    } catch (reason) {
+      connectionStatus.textContent = `Error: ${(reason as Error).message}`;
+    }
+  });
+  let connection: { source: string; pointerId: number } | null = null;
+  function cancelConnection() {
+    connection = null;
+  }
+  function endConnection(event: PointerEvent) {
+    if (!connection || event.pointerId !== connection.pointerId) return;
+    const source = connection.source;
+    cancelConnection();
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLButtonElement>('.connection-target');
+    if (document.body.dataset.mode !== 'edit' || !target || target.hidden) return;
+    const dependent = target.dataset.entity!;
+    try {
+      requireNoConflictingFormDraft();
+      if (session.hasDraft()) throw new Error('Apply or discard the JSON draft before editing the graph.');
+      if (!entities.get(dependent)?.documented) throw new Error('The dependent must be a documented Entity.');
+      editDependency(session, dependent, source, true);
+      refreshDocument(dependent);
+      (document.getElementById('connection-status') as HTMLElement).textContent =
+        `Added ${source} as a Direct dependency of ${dependent}.`;
+    } catch (reason) {
+      connectionStatus.textContent = `Error: ${(reason as Error).message}`;
+    }
+  }
+  function cancelOnEscape(event: KeyboardEvent) {
+    if (event.key === 'Escape') cancelConnection();
+  }
+  window.addEventListener('pointerup', endConnection);
+  window.addEventListener('pointercancel', cancelConnection);
+  window.addEventListener('blur', cancelConnection);
+  window.addEventListener('keydown', cancelOnEscape);
   for (const entity of data.entities) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -316,16 +396,44 @@ export function showGraph(
     button.addEventListener('click', () => selectEntity(entity.name));
     graphEntities.appendChild(button);
     entityButtons.set(entity.name, button);
+    const source = document.createElement('button');
+    source.type = 'button';
+    source.className = 'connection-handle connection-source edit-only';
+    source.tabIndex = -1;
+    source.setAttribute('aria-label', `Start dependency from ${entity.name}`);
+    source.title = 'Drag from this dependency to the dependent Entity’s left handle';
+    source.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || document.body.dataset.mode !== 'edit') return;
+      event.preventDefault();
+      event.stopPropagation();
+      connectionStatus.textContent = '';
+      connection = { source: entity.name, pointerId: event.pointerId };
+    });
+    const target = document.createElement('button');
+    target.type = 'button';
+    target.className = 'connection-handle connection-target edit-only';
+    target.tabIndex = -1;
+    target.dataset.entity = entity.name;
+    target.setAttribute('aria-label', `Connect to dependent ${entity.name}`);
+    target.title = 'Drop a dependency here';
+    graphEntities.append(source, target);
+    handles.set(entity.name, { source, target });
   }
   function positionEntityButtons() {
     for (const [name, button] of entityButtons) {
-      const position = graph.getElementById(ids.get(name)!).renderedPosition();
+      const node = graph.getElementById(ids.get(name)!);
+      const position = node.renderedPosition();
       button.style.left = `${position.x}px`;
       button.style.top = `${position.y}px`;
+      const pair = handles.get(name)!;
+      pair.source.style.left = `${position.x + node.renderedWidth() / 2}px`;
+      pair.target.style.left = `${position.x - node.renderedWidth() / 2}px`;
+      pair.source.style.top = pair.target.style.top = `${position.y}px`;
     }
     if (!moved && !card.hidden && displayedName) positionCard(displayedName);
   }
   graph.on('pan zoom resize', positionEntityButtons);
+  graph.on('position', 'node', positionEntityButtons);
   positionEntityButtons();
   let selected: string | null = null;
   let view: string | undefined = 'all';
@@ -344,6 +452,7 @@ export function showGraph(
     return visited;
   }
   function updateView(fit: boolean) {
+    clearRelationship();
     const visible = view === 'all' ? new Set(entities.keys()) : new Set([selected!]);
     if (view === 'upstream' || view === 'connected') {
       for (const name of reachable(selected!, (name) => entities.get(name)!.dependencies)) visible.add(name);
@@ -358,6 +467,8 @@ export function showGraph(
     graph.nodes().forEach((node) => {
       node.toggleClass('filtered-out', !visible.has(node.data('name')));
       entityButtons.get(node.data('name'))!.hidden = !visible.has(node.data('name'));
+      const pair = handles.get(node.data('name'))!;
+      pair.source.hidden = pair.target.hidden = !visible.has(node.data('name'));
     });
     graph.edges().forEach((edge) => {
       edge.toggleClass(
@@ -495,6 +606,11 @@ export function showGraph(
     cleanup: () => {
       clearTimeout(dismissTimer);
       document.removeEventListener('themechange', applyGraphTheme);
+      document.removeEventListener('modechange', onModeChange);
+      window.removeEventListener('pointerup', endConnection);
+      window.removeEventListener('pointercancel', cancelConnection);
+      window.removeEventListener('blur', cancelConnection);
+      window.removeEventListener('keydown', cancelOnEscape);
       stopEdgeMotion();
       imageExport.cleanup();
       graph.destroy();
