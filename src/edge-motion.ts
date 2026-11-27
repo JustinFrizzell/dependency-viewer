@@ -4,9 +4,12 @@ const DASH_CYCLE = 14;
 const CYCLE_DURATION = 1000;
 
 export function setupEdgeMotion(window: Window, document: Document, graph: Core, button: HTMLButtonElement) {
-  const motionPreference: Partial<MediaQueryList> & Pick<MediaQueryList, 'matches'> = window.matchMedia
-    ? window.matchMedia('(prefers-reduced-motion: reduce)')
-    : { matches: false };
+  let motionPreference: Partial<MediaQueryList> & Pick<MediaQueryList, 'matches'> = { matches: false };
+  try {
+    if (window.matchMedia) motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  } catch {
+    // Media preferences are unavailable.
+  }
   let manuallyPaused = false;
   let systemReducedMotion = motionPreference.matches;
   let dashOffset = 0;

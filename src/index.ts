@@ -6,8 +6,10 @@ import * as documentEdits from './document-edits';
 import { setupColourSettings, writeColourSettings } from './colour-settings';
 import { setupPresentationSettings, writePresentationSettings } from './presentation-settings';
 import { showGraph } from './graph-navigation';
+import { setupTheme } from './theme';
 import type { Graph } from './document-types';
 
+setupTheme(window, document);
 const fileInput = document.getElementById('dependency-file') as HTMLInputElement;
 const fileError = document.getElementById('file-error') as HTMLElement;
 const filePanel = document.getElementById('file-panel') as HTMLElement;
