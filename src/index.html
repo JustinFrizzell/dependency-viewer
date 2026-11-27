@@ -75,7 +75,9 @@
       </details>
     </header>
     <section id="draft-resolution" class="document-panel" aria-label="Resolve drafts before leaving Edit" hidden>
-      <p>Apply or discard each draft before leaving Edit. If drafts conflict, discard one before applying another.</p>
+      <p id="draft-resolution-description">
+        Apply or discard each draft before leaving Edit. If drafts conflict, discard one before applying another.
+      </p>
       <div id="draft-resolution-actions"></div>
       <p id="draft-resolution-error" role="alert"></p>
       <button id="draft-stay" type="button">Stay in Edit</button>
@@ -139,9 +141,11 @@
     </section>
     <main>
       <div id="graph" role="img" aria-label="Directed entity dependency graph" aria-describedby="graph-summary"></div>
+      <div id="graph-entities" aria-label="Graph Entities"></div>
       <p id="status" role="status"></p>
       <p id="graph-count" role="status"></p>
       <p id="graph-filter-status" role="status"></p>
+      <p id="inspection-announcement" class="visually-hidden" role="status"></p>
       <div id="graph-summary" class="visually-hidden"></div>
       <div class="workspace-toolbar">
         <details id="entity-list" hidden>
@@ -211,12 +215,14 @@
         <button id="fit" type="button">Reset to fit</button>
         <button id="edge-motion" type="button">Pause</button>
       </div>
+      <section id="inspector" role="region" aria-label="Entity details" hidden>
+        <div class="inspector-header">
+          <strong>Entity details</strong>
+          <button id="move-inspector" type="button">Move card</button>
+          <button id="close-inspector" type="button" aria-label="Close Entity details">×</button>
+        </div>
+        <div id="selection-status">No entity selected. Select an entity to inspect its details.</div>
+      </section>
     </main>
-    <footer>
-      <details id="inspector" open>
-        <summary>Entity details</summary>
-        <div id="selection-status" aria-live="polite">No entity selected. Select an entity to inspect its details.</div>
-      </details>
-    </footer>
   </body>
 </html>

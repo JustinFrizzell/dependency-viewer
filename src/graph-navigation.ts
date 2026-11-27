@@ -17,6 +17,9 @@ type GraphOptions = {
   requireNoConflictingFormDraft: (owner?: string) => void;
   updateDocumentControls: () => void;
   refreshDocument: (selectedName?: string) => void;
+  resolveSelectionDraft: (name: string) => void;
+  editProperties: (name: string) => void;
+  cardState?: { name: string; left: number; top: number };
 };
 
 export function showGraph(
@@ -29,6 +32,9 @@ export function showGraph(
     requireNoConflictingFormDraft,
     updateDocumentControls,
     refreshDocument,
+    resolveSelectionDraft,
+    editProperties,
+    cardState,
   }: GraphOptions,
 ) {
   const summary = document.getElementById('graph-summary') as HTMLElement;
@@ -121,7 +127,6 @@ export function showGraph(
       .fromJson(graphStyles(document.documentElement.dataset.theme === 'dark'))
       .update();
   document.addEventListener('themechange', applyGraphTheme);
-  (document.getElementById('inspector') as HTMLDetailsElement).addEventListener('toggle', () => graph.resize());
   setupDocumentSettings(graph);
   const imageExport = setupImageExport(window, document, graph, (options) => {
     graph.style().fromJson(graphStyles(false)).update();
@@ -142,6 +147,7 @@ export function showGraph(
     requireNoConflictingFormDraft,
     updateDocumentControls,
     refreshDocument,
+    editProperties,
   });
   const search = document.getElementById('entity-search') as HTMLInputElement;
   const results = document.getElementById('entity-results') as HTMLElement;
@@ -187,6 +193,9 @@ export function showGraph(
         }
         graph.center(node);
       });
+      button.addEventListener('focus', () => {
+        if (moved) inspectAutomatically(entity.name);
+      });
       item.appendChild(button);
       results.appendChild(item);
     }
@@ -200,7 +209,124 @@ export function showGraph(
   const filterStatus = document.getElementById('graph-filter-status') as HTMLElement;
   const clearFilterButton = document.getElementById('clear-graph-filter') as HTMLButtonElement;
   const graphCount = document.getElementById('graph-count') as HTMLElement;
+  const card = document.getElementById('inspector') as HTMLElement;
+  const cardHeader = card.querySelector<HTMLElement>('.inspector-header')!;
+  const moveButton = document.getElementById('move-inspector') as HTMLButtonElement;
+  let invokingControl: HTMLElement | null = null;
+  let moved = false;
+  let persistent = false;
+  let displayedName: string | null = null;
+  let keyboardStart: { left: number; top: number; moved: boolean; persistent: boolean } | null = null;
+  let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+  function moveCard(left: number, top: number) {
+    card.style.left = `${Math.max(0, Math.min(graph.width() - card.offsetWidth, left))}px`;
+    card.style.top = `${Math.max(0, Math.min(graph.height() - card.offsetHeight, top))}px`;
+  }
+  function inspectAutomatically(name: string) {
+    if (inspection.hasEntityDraft() || inspection.hasDependencyDraft()) return;
+    inspection.showEntity(name);
+    displayedName = name;
+    card.hidden = false;
+    if (!moved) positionCard(name);
+  }
+  function positionCard(name: string) {
+    const node = graph.getElementById(ids.get(name)!);
+    const position = node.renderedPosition();
+    const width = card.offsetWidth;
+    const height = card.offsetHeight;
+    card.style.left = `${Math.max(8, Math.min(graph.width() - width - 8, position.x + node.renderedWidth() / 2 + 12))}px`;
+    card.style.top = `${Math.max(8, Math.min(graph.height() - height - 8, position.y - 20))}px`;
+  }
+  cardHeader.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const left = card.offsetLeft;
+    const top = card.offsetTop;
+    cardHeader.setPointerCapture(event.pointerId);
+    const onMove = (move: PointerEvent) => {
+      if (Math.abs(move.clientX - startX) + Math.abs(move.clientY - startY) < 3) return;
+      moved = true;
+      persistent = true;
+      moveCard(left + move.clientX - startX, top + move.clientY - startY);
+    };
+    const onEnd = () => {
+      cardHeader.removeEventListener('pointermove', onMove);
+      cardHeader.removeEventListener('pointerup', onEnd);
+      cardHeader.removeEventListener('pointercancel', onEnd);
+    };
+    cardHeader.addEventListener('pointermove', onMove);
+    cardHeader.addEventListener('pointerup', onEnd);
+    cardHeader.addEventListener('pointercancel', onEnd);
+  });
+  moveButton.addEventListener('click', () => {
+    keyboardStart = { left: card.offsetLeft, top: card.offsetTop, moved, persistent };
+    moveButton.setAttribute('aria-pressed', 'true');
+    moveButton.textContent = 'Moving card: arrows, Enter to finish, Escape to cancel';
+  });
+  moveButton.addEventListener('keydown', (event) => {
+    if (!keyboardStart) return;
+    const delta: Record<string, [number, number]> = {
+      ArrowLeft: [-10, 0],
+      ArrowRight: [10, 0],
+      ArrowUp: [0, -10],
+      ArrowDown: [0, 10],
+    };
+    if (delta[event.key]) {
+      event.preventDefault();
+      moved = true;
+      persistent = true;
+      moveCard(card.offsetLeft + delta[event.key][0], card.offsetTop + delta[event.key][1]);
+    } else if (event.key === 'Enter' || event.key === 'Escape') {
+      event.preventDefault();
+      if (event.key === 'Escape') {
+        moveCard(keyboardStart.left, keyboardStart.top);
+        moved = keyboardStart.moved;
+        persistent = keyboardStart.persistent;
+      }
+      keyboardStart = null;
+      moveButton.removeAttribute('aria-pressed');
+      moveButton.textContent = 'Move card';
+    }
+  });
+  (document.getElementById('close-inspector') as HTMLButtonElement).addEventListener('click', () => {
+    if (!inspection.canChangeSelection()) return;
+    clearTimeout(dismissTimer);
+    card.hidden = true;
+    moved = false;
+    persistent = false;
+    displayedName = null;
+    if (invokingControl?.isConnected) invokingControl.focus();
+    else document.querySelector<HTMLElement>('#entity-list summary')?.focus();
+    invokingControl = null;
+  });
   const viewButtons = [...views.querySelectorAll<HTMLButtonElement>('[data-view]')];
+  const graphEntities = document.getElementById('graph-entities') as HTMLElement;
+  const entityButtons = new Map<string, HTMLButtonElement>();
+  for (const entity of data.entities) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'graph-entity';
+    button.textContent = entity.name;
+    button.setAttribute('aria-label', `Inspect Entity ${entity.name}${entity.documented ? '' : ' (undocumented)'}`);
+    button.addEventListener('focus', () => {
+      if (moved) inspectAutomatically(entity.name);
+    });
+    button.addEventListener('click', () => selectEntity(entity.name));
+    graphEntities.appendChild(button);
+    entityButtons.set(entity.name, button);
+  }
+  function positionEntityButtons() {
+    for (const [name, button] of entityButtons) {
+      const position = graph.getElementById(ids.get(name)!).renderedPosition();
+      button.style.left = `${position.x}px`;
+      button.style.top = `${position.y}px`;
+    }
+    if (!moved && !card.hidden && displayedName) positionCard(displayedName);
+  }
+  graph.on('pan zoom resize', positionEntityButtons);
+  positionEntityButtons();
   let selected: string | null = null;
   let view: string | undefined = 'all';
   const filterQuery = () => graphFilter.value.trim().toLowerCase();
@@ -231,6 +357,7 @@ export function showGraph(
     }
     graph.nodes().forEach((node) => {
       node.toggleClass('filtered-out', !visible.has(node.data('name')));
+      entityButtons.get(node.data('name'))!.hidden = !visible.has(node.data('name'));
     });
     graph.edges().forEach((edge) => {
       edge.toggleClass(
@@ -279,7 +406,17 @@ export function showGraph(
   views.hidden = false;
   updateView(false);
   function selectEntity(name: string) {
-    if (!inspection.canChangeSelection()) return false;
+    if (displayedName === name && (inspection.hasEntityDraft() || inspection.hasDependencyDraft())) {
+      card.hidden = false;
+      persistent = true;
+      return true;
+    }
+    if (!inspection.canChangeSelection()) {
+      resolveSelectionDraft(name);
+      return false;
+    }
+    if (document.activeElement instanceof HTMLElement && !card.contains(document.activeElement))
+      invokingControl = document.activeElement;
     const clearFilter = !name.toLowerCase().includes(filterQuery());
     if (clearFilter) graphFilter.value = '';
     selected = name;
@@ -287,25 +424,30 @@ export function showGraph(
     graph.getElementById(ids.get(name)!).addClass('inspected');
     updateView(clearFilter || view !== 'all');
     inspection.showEntity(name);
+    displayedName = name;
+    (document.getElementById('inspection-announcement') as HTMLElement).textContent = `Entity ${name} selected.`;
+    card.hidden = false;
+    persistent = true;
+    if (!moved) positionCard(name);
     return true;
   }
   graph.on('tap', 'node', (event) => selectEntity(event.target.data('name')));
   graph.on('mouseover', 'node', (event) => {
-    if (!tooltipsEnabled()) return;
-    const entity = entities.get(event.target.data('name'))!;
-    const lines = [
-      entity.name,
-      entity.documented ? `Description: ${entity.description || 'No description provided.'}` : 'Undocumented entity',
-      `Direct dependencies: ${entity.documented ? entity.dependencies.join(', ') || 'None' : 'Unknown'}`,
-      `Direct downstream entities: ${downstream.get(entity.name)!.join(', ') || 'None'}`,
-    ];
-    for (const [key, value] of entity.extras || []) {
-      lines.push(`${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
-    }
-    graph.container()!.title = lines.join('\n');
+    if (!tooltipsEnabled() || (!moved && persistent)) return;
+    clearTimeout(dismissTimer);
+    inspectAutomatically(event.target.data('name'));
   });
   graph.on('mouseout', 'node', () => {
-    graph.container()!.removeAttribute('title');
+    if (!moved && !persistent) {
+      dismissTimer = setTimeout(() => {
+        if (!moved && !persistent && !inspection.hasEntityDraft() && !inspection.hasDependencyDraft())
+          card.hidden = true;
+      }, 200);
+    }
+  });
+  card.addEventListener('pointerenter', () => clearTimeout(dismissTimer));
+  card.addEventListener('pointerleave', () => {
+    if (!moved && !persistent && !inspection.hasEntityDraft() && !inspection.hasDependencyDraft()) card.hidden = true;
   });
   const zoomLevel = document.getElementById('zoom-level') as HTMLOutputElement;
   const updateZoom = () => {
@@ -332,11 +474,26 @@ export function showGraph(
   }
   (document.getElementById('zoom-in') as HTMLButtonElement).addEventListener('click', () => zoom(1.25));
   (document.getElementById('zoom-out') as HTMLButtonElement).addEventListener('click', () => zoom(1 / 1.25));
-  if (selectedName && entities.has(selectedName)) selectEntity(selectedName);
+  const initialName = selectedName || cardState?.name;
+  if (initialName && entities.has(initialName)) selectEntity(initialName);
+  if (cardState && !card.hidden) {
+    moved = true;
+    moveCard(cardState.left, cardState.top);
+  }
   return {
     inspection,
+    selectEntity: (name: string) => {
+      const selected = selectEntity(name);
+      if (selected) graph.center(graph.getElementById(ids.get(name)!));
+      return selected;
+    },
+    cardState: () =>
+      moved && displayedName && !card.hidden
+        ? { name: displayedName, left: card.offsetLeft, top: card.offsetTop }
+        : undefined,
     resize: () => graph.resize(),
     cleanup: () => {
+      clearTimeout(dismissTimer);
       document.removeEventListener('themechange', applyGraphTheme);
       stopEdgeMotion();
       imageExport.cleanup();

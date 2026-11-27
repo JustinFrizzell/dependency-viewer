@@ -411,21 +411,6 @@ button:hover {
   background: white;
   border-radius: 6px;
 }
-footer {
-  flex: none;
-  border-top: 1px solid #dfe8eb;
-  color: #355565;
-  background: white;
-}
-#inspector[open] {
-  height: min(230px, 35vh);
-  overflow: auto;
-}
-#inspector summary {
-  cursor: pointer;
-  padding: 10px 24px;
-  font-weight: 600;
-}
 #selection-status {
   padding: 4px 24px 14px;
 }
@@ -447,20 +432,20 @@ footer {
 #selection-status fieldset {
   margin-top: 8px;
 }
-footer h2 {
+#inspector h2 {
   display: inline;
   margin: 0;
   font-size: 16px;
   overflow-wrap: anywhere;
   color: #172b3a;
 }
-footer h3 {
+#inspector h3 {
   margin: 0 0 5px;
   font-size: 12px;
   color: #718692;
   text-transform: uppercase;
 }
-footer p {
+#inspector p {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -712,20 +697,6 @@ body:not([data-loaded]) .file-panel:not([hidden]) {
   bottom: 12px;
   right: 12px;
 }
-footer {
-  position: fixed;
-  z-index: 3;
-  left: 12px;
-  bottom: 52px;
-  width: min(600px, calc(100vw - 24px));
-  border: 1px solid #c9dade;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px #1238491a;
-}
-#inspector[open] {
-  height: auto;
-  max-height: 35vh;
-}
 @media (max-width: 1000px) {
   header {
     right: auto;
@@ -904,6 +875,60 @@ main {
   pointer-events: none;
 }
 
+#inspector {
+  position: absolute;
+  z-index: 5;
+  width: min(440px, calc(100vw - 24px));
+  max-height: min(70vh, 650px);
+  overflow: auto;
+  color: #355565;
+  background: white;
+  border: 1px solid #c9dade;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px #12384933;
+}
+#inspector[hidden] {
+  display: none;
+}
+.inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #edf5f5;
+}
+.inspector-header strong {
+  flex: 1;
+}
+.inspector-details {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+#graph-entities {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.graph-entity {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.graph-entity:focus-visible {
+  opacity: 1;
+  z-index: 4;
+  outline: 3px solid #006e64;
+}
+.inspector-header {
+  cursor: move;
+  touch-action: none;
+}
+.inspector-header button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
 /* Application theme is independent of Document appearance settings. */
 :root {
   color-scheme: light;
@@ -922,7 +947,7 @@ textarea,
   border-color: #708890;
 }
 .entity-result-prefix,
-footer h3,
+#inspector h3,
 .entity-extras dt {
   color: #526e79;
 }
@@ -966,7 +991,7 @@ header label {
 :root[data-theme='dark'] .colour-settings-content,
 :root[data-theme='dark'] .filter-menu-content,
 :root[data-theme='dark'] .export-menu-content,
-:root[data-theme='dark'] footer,
+:root[data-theme='dark'] #inspector,
 :root[data-theme='dark'] #zoom-level {
   color: #edf5f5;
   background: #1d3440;
@@ -997,8 +1022,8 @@ header label {
 :root[data-theme='dark'] .entity-result-prefix,
 :root[data-theme='dark'] .colour-settings-content p,
 :root[data-theme='dark'] .export-menu-content p,
-:root[data-theme='dark'] footer h3,
-:root[data-theme='dark'] footer h2,
+:root[data-theme='dark'] #inspector h3,
+:root[data-theme='dark'] #inspector h2,
 :root[data-theme='dark'] .entity-extras dt {
   color: #c1d5d9;
 }
@@ -1013,4 +1038,9 @@ header label {
 }
 :root[data-theme='dark'] :focus-visible {
   outline-color: #91d8ff;
+}
+
+:root[data-theme='dark'] .inspector-header {
+  color: #edf5f5;
+  background: #29444f;
 }

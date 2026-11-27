@@ -14,7 +14,6 @@ const fileInput = document.getElementById('dependency-file') as HTMLInputElement
 const fileError = document.getElementById('file-error') as HTMLElement;
 const filePanel = document.getElementById('file-panel') as HTMLElement;
 const mainTemplate = document.querySelector('main')!.cloneNode(true);
-const footerTemplate = document.querySelector('footer')!.cloneNode(true);
 (document.getElementById('status') as HTMLElement).textContent = 'Choose a JSON file to view dependencies.';
 const header = document.querySelector('header')!;
 let toolbarObserver: ResizeObserver | undefined;
@@ -27,6 +26,8 @@ function positionSurfaces() {
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(positionSurfaces).observe(header);
 let cleanupGraph = () => {};
 let resizeGraph = () => {};
+let selectGraphEntity: (name: string) => boolean = () => false;
+let getCardState: ReturnType<typeof showGraph>['cardState'] = () => undefined;
 let selection = 0;
 let session: DocumentSession | null = null;
 let mode: 'view' | 'edit' = 'view';
@@ -128,7 +129,8 @@ function openDocument(raw: string, name: string) {
   updateDocumentControls();
 }
 
-function renderGraph(graph: Graph, selectedName?: string) {
+function renderGraph(graph: Graph, selectedName?: string, preserveCard = false) {
+  const cardState = preserveCard ? getCardState() : undefined;
   cleanupGraph();
   inspection = null;
   toolbarObserver?.disconnect();
@@ -138,7 +140,6 @@ function renderGraph(graph: Graph, selectedName?: string) {
     toolbarObserver = new ResizeObserver(positionSurfaces);
     toolbarObserver.observe(toolbar);
   }
-  document.querySelector('footer')!.replaceWith(footerTemplate.cloneNode(true));
   displayedGraph = JSON.stringify(graph);
   filePanel.hidden = true;
   (document.getElementById('toggle-file-panel') as HTMLButtonElement).setAttribute(
@@ -147,16 +148,30 @@ function renderGraph(graph: Graph, selectedName?: string) {
   );
   const navigation = showGraph(graph, selectedName, {
     session: session!,
+    cardState,
     setupDocumentSettings,
     tooltipsEnabled: () => presentationControls.tooltipsEnabled(),
     requireNoConflictingFormDraft,
     updateDocumentControls,
     refreshDocument,
+    resolveSelectionDraft: (name) => {
+      resolutionError.textContent = '';
+      showDraftResolution(name);
+    },
+    editProperties: (name) => {
+      metadataEntity.value = name;
+      resetMetadataProperties();
+      const panel = document.getElementById('metadata-panel') as HTMLDetailsElement;
+      panel.open = true;
+      metadataProperty.focus();
+    },
   });
   if (!graph.entities.length) {
     (document.getElementById('status') as HTMLElement).textContent = 'No entities in this dependency dataset.';
   }
   inspection = navigation.inspection;
+  selectGraphEntity = navigation.selectEntity;
+  getCardState = navigation.cardState;
   cleanupGraph = navigation.cleanup;
   resizeGraph = navigation.resize;
   updateDocumentControls();
@@ -203,6 +218,9 @@ function updateDocumentControls() {
 const resolutionPanel = document.getElementById('draft-resolution') as HTMLElement;
 const resolutionActions = document.getElementById('draft-resolution-actions') as HTMLElement;
 const resolutionError = document.getElementById('draft-resolution-error') as HTMLElement;
+const resolutionDescription = document.getElementById('draft-resolution-description') as HTMLElement;
+const resolutionStay = document.getElementById('draft-stay') as HTMLButtonElement;
+let resolutionReturnFocus: HTMLElement | null = null;
 function drafts() {
   return [
     {
@@ -242,14 +260,27 @@ function drafts() {
     },
   ].filter((draft) => draft.active());
 }
-function showDraftResolution() {
+function showDraftResolution(selectionName?: string) {
+  if (resolutionPanel.hidden)
+    resolutionReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  resolutionPanel.setAttribute(
+    'aria-label',
+    selectionName ? 'Resolve drafts before changing Entity' : 'Resolve drafts before leaving Edit',
+  );
+  resolutionDescription.textContent = selectionName
+    ? 'Apply or discard each draft before changing Entity. If drafts conflict, discard one before applying another.'
+    : 'Apply or discard each draft before leaving Edit. If drafts conflict, discard one before applying another.';
+  resolutionStay.textContent = selectionName ? 'Stay on current Entity' : 'Stay in Edit';
   const pending = drafts();
   resolutionActions.replaceChildren();
   if (!pending.length) {
     resolutionPanel.hidden = true;
-    mode = 'view';
-    updateDocumentControls();
-    (document.getElementById('mode-view') as HTMLButtonElement).focus();
+    if (selectionName) selectGraphEntity(selectionName);
+    else {
+      mode = 'view';
+      updateDocumentControls();
+      (document.getElementById('mode-view') as HTMLButtonElement).focus();
+    }
     return;
   }
   resolutionPanel.hidden = false;
@@ -262,7 +293,7 @@ function showDraftResolution() {
       button.addEventListener('click', () => {
         resolutionError.textContent = '';
         if (!draft.active()) {
-          showDraftResolution();
+          showDraftResolution(selectionName);
           return;
         }
         if (action === 'apply' && drafts().length > 1) {
@@ -276,7 +307,7 @@ function showDraftResolution() {
           resolutionError.textContent =
             document.querySelector<HTMLElement>(draft.error)?.textContent || 'Draft could not be applied.';
         } else {
-          showDraftResolution();
+          showDraftResolution(selectionName);
         }
       });
       row.appendChild(button);
@@ -288,7 +319,9 @@ function showDraftResolution() {
 (document.getElementById('draft-stay') as HTMLButtonElement).addEventListener('click', () => {
   resolutionPanel.hidden = true;
   resolutionError.textContent = '';
-  (document.getElementById('mode-edit') as HTMLButtonElement).focus();
+  if (resolutionReturnFocus?.isConnected) resolutionReturnFocus.focus();
+  else (document.getElementById('mode-edit') as HTMLButtonElement).focus();
+  resolutionReturnFocus = null;
 });
 (document.getElementById('mode-view') as HTMLButtonElement).addEventListener('click', () => {
   if (!session) return;
@@ -305,7 +338,7 @@ function refreshDocument(selectedName?: string) {
   if (JSON.stringify(graph) === displayedGraph) {
     colourControls.update(JSON.parse(session!.current()));
     presentationControls.update(JSON.parse(session!.current()));
-  } else renderGraph(graph, selectedName);
+  } else renderGraph(graph, selectedName, true);
 }
 
 function resetMetadata(selectedName = metadataEntity.value) {
