@@ -186,10 +186,14 @@ function renderGraph(
   cleanupGraph();
   inspection = null;
   toolbarObserver?.disconnect();
-  for (const id of ['entity-list', 'colour-settings', 'export-menu']) header.querySelector(`#${id}`)?.remove();
+  for (const id of ['entity-list', 'graph-filter-control', 'colour-settings', 'export-menu'])
+    header.querySelector(`#${id}`)?.remove();
   document.querySelector('main')!.replaceWith(mainTemplate.cloneNode(true));
-  for (const id of ['entity-list', 'colour-settings', 'export-menu']) {
-    header.appendChild(document.getElementById(id)!);
+  for (const id of ['entity-list', 'graph-filter-control']) {
+    header.insertBefore(document.getElementById(id)!, document.querySelector('.mode-switch'));
+  }
+  for (const id of ['colour-settings', 'export-menu']) {
+    header.insertBefore(document.getElementById(id)!, document.getElementById('toggle-theme'));
   }
   if (typeof ResizeObserver !== 'undefined') {
     const toolbar = document.querySelector('.workspace-toolbar')!;

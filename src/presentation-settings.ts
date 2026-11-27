@@ -71,9 +71,9 @@ export function setupPresentationSettings(
   function apply() {
     graph.nodes().forEach((node) => {
       node.style({
-        width: state.compact ? 150 : 182,
+        width: state.compact ? 174 : 210,
         height: state.compact ? 46 : 64,
-        'text-max-width': state.compact ? 95 : 125,
+        'text-max-width': state.compact ? 119 : 153,
       });
     });
     if (!state.tooltips && graph.container) graph.container()!.removeAttribute('title');

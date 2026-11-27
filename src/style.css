@@ -1223,6 +1223,46 @@ header label,
 header h1 {
   white-space: nowrap;
 }
+.mode-switch {
+  display: flex;
+  padding: 3px;
+  background: var(--canvas);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+}
+header .mode-switch button,
+:root[data-theme='dark'] header .mode-switch button {
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+header .mode-switch button[aria-pressed='true'],
+:root[data-theme='dark'] header .mode-switch button[aria-pressed='true'] {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 3px #0002;
+}
+header #toggle-theme,
+:root[data-theme='dark'] header #toggle-theme {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 18px;
+}
+header #toggle-theme:hover,
+:root[data-theme='dark'] header #toggle-theme:hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
 header #entity-list:not([hidden]),
 header #colour-settings:not([hidden]),
 header #export-menu {
@@ -1239,9 +1279,6 @@ header #entity-list:not([hidden]) {
 header #entity-list summary,
 header #colour-settings summary {
   padding: 8px 12px;
-}
-header #export-menu .export-menu-content {
-  top: calc(100% + 8px);
 }
 header .colour-settings-content {
   left: auto;
@@ -1382,4 +1419,141 @@ body[data-small-screen='true']:has(#small-screen-notice:not([hidden])) .entity-l
   --find-top: min(var(--editor-top, 120px), max(8px, calc(100vh - var(--small-notice-height, 90px) - 168px)));
   top: var(--find-top);
   max-height: max(0px, calc(100vh - var(--find-top) - var(--small-notice-height, 90px) - 16px));
+}
+
+/* Prototype-inspired top bar */
+:root {
+  --bar-line: #e4e6eb;
+}
+:root[data-theme='dark'] {
+  --bar-line: #303440;
+}
+header,
+:root[data-theme='dark'] header {
+  border-color: var(--bar-line);
+}
+header h1 {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+header h1::after {
+  content: '';
+  width: 1px;
+  height: 26px;
+  margin-left: 12px;
+  background: var(--bar-line);
+}
+header :is(#toggle-file-panel, #undo-document, #redo-document),
+header :is(#entity-list, #colour-settings, #export-menu, #document-panel, #add-entity-panel, #metadata-panel) > summary,
+:root[data-theme='dark'] header :is(#toggle-file-panel, #undo-document, #redo-document),
+:root[data-theme='dark']
+  header
+  :is(#entity-list, #colour-settings, #export-menu, #document-panel, #add-entity-panel, #metadata-panel)
+  > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+header
+  :is(#entity-list, #colour-settings, #export-menu, #document-panel, #add-entity-panel, #metadata-panel)
+  > summary::-webkit-details-marker {
+  display: none;
+}
+header :is(#toggle-file-panel, #export-menu > summary),
+:root[data-theme='dark'] header :is(#toggle-file-panel, #export-menu > summary) {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--bar-line);
+}
+header :is(#toggle-file-panel, #undo-document, #redo-document, summary):hover,
+:root[data-theme='dark'] header :is(#toggle-file-panel, #undo-document, #redo-document, summary):hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+body[data-mode='view'] header :is(#undo-document, #redo-document) {
+  display: none;
+}
+header :is(#entity-list, #colour-settings):not([hidden]),
+:root[data-theme='dark'] header :is(#entity-list, #colour-settings):not([hidden]) {
+  background: transparent;
+  border: 0;
+}
+header #entity-list:not([hidden]) {
+  margin-left: auto;
+}
+header :is(.entity-list-content, .colour-settings-content, .export-menu-content) {
+  position: fixed;
+  top: var(--toolbar-top, 76px);
+  right: 20px;
+  left: auto;
+}
+#document-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#unsaved-indicator:not(:empty) {
+  color: var(--accent);
+}
+header .mode-switch {
+  border-color: var(--bar-line);
+}
+#graph-filter-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--canvas);
+  border: 1px solid var(--bar-line);
+  border-radius: 8px;
+}
+header #graph-filter-control > span {
+  color: var(--muted);
+  font-size: 18px;
+}
+header #graph-filter,
+:root[data-theme='dark'] header #graph-filter {
+  width: 120px;
+  min-width: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+}
+#graph-filter::-webkit-search-cancel-button {
+  display: none;
+}
+header #clear-graph-filter,
+:root[data-theme='dark'] header #clear-graph-filter {
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+#clear-graph-filter[hidden] {
+  display: none;
+}
+@media (max-width: 1000px) {
+  header #entity-list:not([hidden]) {
+    margin-left: 0;
+  }
 }

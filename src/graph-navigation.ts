@@ -86,16 +86,16 @@ export function showGraph(
       style: {
         label: 'data(label)',
         shape: 'round-rectangle',
-        width: compact ? 150 : 182,
+        width: compact ? 174 : 210,
         height: compact ? 46 : 64,
         'background-color': dark ? '#191c24' : '#ffffff',
-        'border-color': dark ? '#a6c1c7' : '#607d87',
-        'border-width': 2,
+        'border-color': dark ? '#596170' : '#c9cdd5',
+        'border-width': 1,
         color: dark ? '#edf5f5' : '#172b3a',
         'font-size': 13,
         'font-weight': 600,
         'text-wrap': 'ellipsis',
-        'text-max-width': (compact ? 95 : 125) as unknown as string,
+        'text-max-width': (compact ? 119 : 153) as unknown as string,
         'text-margin-x': 20,
         'text-halign': 'center',
         'text-valign': 'center',
@@ -107,6 +107,7 @@ export function showGraph(
       style: {
         'border-style': 'dashed',
         'border-color': dark ? '#f5cb78' : '#956000',
+        'border-width': 2,
         'background-color': dark ? '#3d3426' : '#fff9ec',
       },
     },
@@ -624,9 +625,6 @@ export function showGraph(
         .join(', ') || 'none');
     filterStatus.textContent = query && !visible.size ? 'No matching entities.' : '';
     clearFilterButton.hidden = !graphFilter.value;
-    const activeFilter = document.getElementById('active-filter') as HTMLElement;
-    activeFilter.textContent = graphFilter.value.trim();
-    activeFilter.title = graphFilter.value.trim();
     const connections = data.edges.filter((edge) => visible.has(edge.source) && visible.has(edge.target)).length;
     graphCount.textContent = `${visible.size} ${visible.size === 1 ? 'Entity' : 'Entities'} · ${connections} ${connections === 1 ? 'connection' : 'connections'}`;
     imageExport.update();

@@ -19,15 +19,18 @@
     </aside>
     <header>
       <h1>Dependency viewer</h1>
-      <span id="document-name">No Document</span><span id="unsaved-indicator"></span>
-      <button id="toggle-file-panel" type="button" aria-controls="file-panel" aria-expanded="true">File</button>
-      <label for="theme-preference">Theme</label>
-      <select id="theme-preference">
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-      <div role="group" aria-label="Document mode">
+      <button
+        id="toggle-file-panel"
+        type="button"
+        aria-label="File"
+        aria-describedby="document-name unsaved-indicator"
+        aria-controls="file-panel"
+        aria-expanded="true"
+      >
+        <span aria-hidden="true">▤</span> <span id="document-name">No Document</span>
+        <span id="unsaved-indicator"></span> <span aria-hidden="true">▾</span>
+      </button>
+      <div class="mode-switch" role="group" aria-label="Document mode">
         <button id="mode-view" type="button" aria-pressed="true">View</button>
         <button id="mode-edit" type="button" aria-pressed="false" disabled>Edit</button>
       </div>
@@ -80,6 +83,7 @@
           </form>
         </div>
       </details>
+      <button id="toggle-theme" type="button" aria-label="Switch to dark mode">☾</button>
     </header>
     <section id="draft-resolution" class="document-panel" aria-label="Resolve drafts before leaving Edit" hidden>
       <p id="draft-resolution-description">
@@ -91,6 +95,12 @@
     </section>
     <section id="file-panel" class="file-panel" aria-label="Dependency file">
       <h2 id="open-prompt">Open a Document</h2>
+      <label for="theme-preference">Theme</label>
+      <select id="theme-preference">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
       <label for="dependency-file">Choose dependency JSON</label>
       <input id="dependency-file" type="file" accept=".json,application/json" />
       <label for="paste-json">Or paste dependency JSON</label>
@@ -168,6 +178,17 @@
       </p>
       <div id="graph-summary" class="visually-hidden"></div>
       <div class="workspace-toolbar">
+        <div id="graph-filter-control">
+          <span aria-hidden="true">⌕</span>
+          <input
+            id="graph-filter"
+            type="search"
+            autocomplete="off"
+            aria-label="Filter graph by Entity name"
+            placeholder="Filter Entities..."
+          />
+          <button id="clear-graph-filter" type="button" aria-label="Clear graph filter" hidden>×</button>
+        </div>
         <details id="entity-list" hidden>
           <summary>Find Entity</summary>
           <div class="entity-list-content">
@@ -203,14 +224,6 @@
           <button type="button" data-view="upstream" aria-pressed="false" disabled>Upstream</button>
           <button type="button" data-view="downstream" aria-pressed="false" disabled>Downstream</button>
           <button type="button" data-view="connected" aria-pressed="false" disabled>Connected</button>
-          <details id="filter-menu">
-            <summary>Filter <span id="active-filter"></span></summary>
-            <div class="filter-menu-content">
-              <label for="graph-filter">Filter graph by Entity name</label>
-              <input id="graph-filter" type="search" autocomplete="off" placeholder="Filter entity names" />
-              <button id="clear-graph-filter" type="button" aria-label="Clear graph filter" hidden>Clear</button>
-            </div>
-          </details>
           <details id="export-menu">
             <summary>Export</summary>
             <div class="export-menu-content">

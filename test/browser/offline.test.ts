@@ -49,14 +49,17 @@ async function openEntityEditor(page: Page) {
 }
 
 async function openFilter(page: Page) {
-  const menu = page.locator('#filter-menu');
-  if (!(await menu.evaluate((element: HTMLDetailsElement) => element.open))) await menu.locator('summary').click();
+  await page.locator('#graph-filter').focus();
 }
 
 async function openSettings(page: Page) {
   const settings = page.locator('#colour-settings');
   if (!(await settings.evaluate((element: HTMLDetailsElement) => element.open)))
     await settings.locator('summary').click();
+}
+
+async function setTheme(page: Page, theme: 'light' | 'dark') {
+  if ((await page.locator('html').getAttribute('data-theme')) !== theme) await page.locator('#toggle-theme').click();
 }
 
 function trackExternalRequests(page: Page) {
@@ -540,12 +543,12 @@ test('theme text and essential controls meet contrast targets', async () => {
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
     for (const theme of ['light', 'dark']) {
-      await page.getByLabel('Theme').selectOption(theme);
+      await setTheme(page, theme as 'light' | 'dark');
       for (const selector of [
         '#inspector',
         '#zoom-in',
         '#graph-count',
-        '#filter-menu summary',
+        '#graph-filter-control',
         '#theme-preference',
         '#mode-view',
       ]) {
@@ -554,7 +557,7 @@ test('theme text and essential controls meet contrast targets', async () => {
           return [style.color, style.backgroundColor, style.borderTopColor];
         });
         assert.ok(contrast(colours[0], colours[1]) >= 4.5, `${theme} ${selector} text`);
-        if (selector === '#zoom-in' || selector === '#filter-menu summary') {
+        if (selector === '#zoom-in') {
           assert.ok(contrast(colours[2], colours[1]) >= 3, `${theme} ${selector} boundary`);
         }
       }
@@ -608,7 +611,7 @@ test('dark graph and white PNG retain colour rules, connections and selection', 
         '{"entities":[{"name":"bronze A","dependencies":["Missing"]},{"name":"Plain","dependencies":["bronze A"]}]}',
       );
     await page.locator('#open-paste').click();
-    await page.getByLabel('Theme').selectOption('dark');
+    await setTheme(page, 'dark');
     await openFind(page);
     await page.locator('#entity-results button[title="Plain"]').click();
     await page.getByRole('button', { name: 'Close Entity details' }).click();
@@ -663,6 +666,39 @@ test('dark graph and white PNG retain colour rules, connections and selection', 
     assert.ok(exportCounts['233,201,173'] > 50, 'displayed colour rule');
     assert.ok(exportCounts['8,124,114'] > 20, 'selection outline visible on white');
     assert.ok(exportCounts['96,125,135'] > 20, 'edges visible on white');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('prototype controls toggle the theme and wider nodes retain compact mode', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { colorScheme: 'light' });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"warehouse.orders","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    const mode = page.getByRole('group', { name: 'Document mode' });
+    assert.equal(await mode.locator('#mode-view').getAttribute('aria-pressed'), 'true');
+    assert.equal(await mode.evaluate((element) => getComputedStyle(element).display), 'flex');
+    assert.equal(await page.locator('.graph-entity-decoration').evaluate((element) => element.style.width), '210px');
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    assert.equal(await page.getByRole('button', { name: 'Switch to light mode' }).textContent(), '☀');
+    assert.equal(await page.evaluate(() => localStorage.getItem('dependency-viewer-theme')), 'dark');
+    await page.locator('#mode-edit').click();
+    assert.equal(await mode.locator('#mode-edit').getAttribute('aria-pressed'), 'true');
+    await openSettings(page);
+    await page.locator('#compact-nodes').check();
+    await page.waitForFunction(
+      () => document.querySelector<HTMLElement>('.graph-entity-decoration')?.style.width === '174px',
+    );
+    await page.locator('#toggle-file-panel').click();
+    await page.getByLabel('Theme').selectOption('system');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    assert.equal(await page.getByRole('button', { name: 'Switch to light mode' }).textContent(), '☀');
   } finally {
     await browser.close();
   }
@@ -737,7 +773,7 @@ test('switching themes preserves Document settings, history and session state', 
     await page.locator('#paste-json').fill(JSON.stringify(original));
     await page.locator('#open-paste').click();
     const before = await page.locator('#document-json').inputValue();
-    await page.getByLabel('Theme').selectOption('dark');
+    await setTheme(page, 'dark');
     assert.equal(await page.locator('#document-json').inputValue(), before);
     assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -748,7 +784,7 @@ test('switching themes preserves Document settings, history and session state', 
     assert.equal(await page.getByLabel('Text for bronze colour').inputValue(), 'A');
     await page.locator('#compact-nodes').uncheck();
     const changed = await page.locator('#document-json').inputValue();
-    await page.getByLabel('Theme').selectOption('light');
+    await setTheme(page, 'light');
     assert.equal(await page.locator('#document-json').inputValue(), changed);
     await page.locator('#undo-document').click();
     assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), original);
@@ -768,7 +804,7 @@ test('switching themes preserves Document settings, history and session state', 
     assert.equal(await page.locator('#colours-enabled').isDisabled(), true);
     assert.equal(await page.locator('#compact-nodes').isDisabled(), true);
     const incompatibleJSON = await page.locator('#document-json').inputValue();
-    await page.getByLabel('Theme').selectOption('dark');
+    await setTheme(page, 'dark');
     assert.equal(await page.locator('#document-json').inputValue(), incompatibleJSON);
     assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
   } finally {
@@ -1335,22 +1371,53 @@ test('narrow screens keep File and graph controls reachable', async () => {
   }
 });
 
-test('Filter is a temporary surface with an active label and clear action', async () => {
+test('top bar follows the prototype layout and keeps edit controls mode-specific', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 1440, height: 800 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"One","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    const header = page.locator('header');
+    const style = await header.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { border: css.borderTopColor, shadow: css.boxShadow };
+    });
+    assert.equal(style.border, 'rgb(228, 230, 235)');
+    assert.notEqual(style.shadow, 'none');
+    const file = (await page.locator('#toggle-file-panel').boundingBox())!;
+    const filter = (await page.locator('#graph-filter').boundingBox())!;
+    const mode = (await page.locator('.mode-switch').boundingBox())!;
+    const theme = (await page.locator('#toggle-theme').boundingBox())!;
+    assert.ok(file.x < filter.x && filter.x < mode.x && mode.x < theme.x);
+    assert.equal(await page.locator('#undo-document').isVisible(), false);
+    await page.locator('#mode-edit').click();
+    assert.equal(await page.locator('#undo-document').isVisible(), true);
+    await openSettings(page);
+    const settings = (await page.locator('.colour-settings-content').boundingBox())!;
+    assert.ok(settings.x >= 0 && settings.x + settings.width <= 1440);
+    await page.locator('#colour-settings summary').click();
+    await setTheme(page, 'dark');
+    assert.equal(await header.evaluate((element) => getComputedStyle(element).borderTopColor), 'rgb(48, 52, 64)');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Filter is inline in the top bar and can be cleared by keyboard', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"One","dependencies":[]}]}');
     await page.locator('#open-paste').click();
-    assert.equal(await page.locator('#graph-filter').isVisible(), false);
-    await page.locator('#filter-menu summary').click();
+    assert.equal(await page.locator('header #graph-filter').isVisible(), true);
     await page.locator('#graph-filter').fill(' One ');
-    assert.match((await page.locator('#filter-menu summary').textContent())!, /One/);
-    await page.locator('#filter-menu summary').click();
-    assert.equal(await page.locator('#graph-filter').isVisible(), false);
-    await page.locator('#filter-menu summary').click();
-    await page.getByRole('button', { name: 'Clear graph filter' }).click();
-    assert.doesNotMatch((await page.locator('#filter-menu summary').textContent())!, /One/);
+    assert.match((await page.locator('#graph-count').textContent())!, /^1 Entity/);
+    await page.getByRole('button', { name: 'Clear graph filter' }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#graph-filter').inputValue(), '');
+    assert.equal(await page.locator('#graph-filter').evaluate((element) => element === document.activeElement), true);
   } finally {
     await browser.close();
   }
@@ -1372,11 +1439,10 @@ test('narrow-screen Settings and Filter remain usable', async () => {
     await page.locator('#compact-nodes').check();
     await page.locator('#colour-settings summary').click();
     await openFilter(page);
-    const filterBounds = (await page.locator('.filter-menu-content').boundingBox())!;
+    const filterBounds = (await page.locator('#graph-filter-control').boundingBox())!;
     assert.ok(filterBounds.x >= 0 && filterBounds.x + filterBounds.width <= 375);
     await page.locator('#graph-filter').fill('A');
     await page.getByRole('button', { name: 'Clear graph filter' }).click();
-    await page.locator('#filter-menu summary').click();
     await page.locator('#export-menu summary').click();
     assert.equal(await page.locator('#export-png').isEnabled(), true);
   } finally {
