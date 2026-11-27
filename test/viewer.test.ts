@@ -286,7 +286,7 @@ test('exports the full filtered graph at the selected resolution', async () => {
   }
 });
 
-test('entity details can be collapsed while selection continues to update', () => {
+test('entity details close and reopen on selection', () => {
   const dom = open(
     dataset({
       entities: [
@@ -297,18 +297,16 @@ test('entity details can be collapsed while selection continues to update', () =
   );
   try {
     const document = dom.window.document;
-    const inspector = document.getElementById('inspector') as HTMLDetailsElement;
-    const summary = inspector.querySelector('summary') as HTMLElement;
-    assert.equal(inspector.open, true);
-    summary.click();
-    assert.equal(inspector.open, false);
+    const inspector = document.getElementById('inspector') as HTMLElement;
+    assert.equal(inspector.hidden, true);
+    (document.querySelector('#entity-results button[title="first"]') as HTMLButtonElement).click();
+    assert.equal(inspector.hidden, false);
+    (document.getElementById('close-inspector') as HTMLButtonElement).click();
+    assert.equal(inspector.hidden, true);
     [...document.querySelectorAll<HTMLButtonElement>('#entity-results button')]
       .find((button) => button.title === 'second')!
       .click();
-    assert.equal(inspector.open, false);
-    assert.equal((document.querySelector('#selection-status h2') as HTMLElement).textContent, 'second');
-    summary.click();
-    assert.equal(inspector.open, true);
+    assert.equal(inspector.hidden, false);
     assert.equal((document.querySelector('#selection-status h2') as HTMLElement).textContent, 'second');
   } finally {
     dom.window.close();
@@ -785,8 +783,8 @@ test('selecting a graph entity opens its inspector without changing the view', (
     const graph = document.getElementById('graph') as HTMLElement;
     const canvas = graph.querySelector('canvas') as HTMLElement;
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
-    assert.match(graph.title, /warehouse\.orders/);
-    assert.match(graph.title, /Order facts/);
+    assert.match(inspector.textContent, /warehouse\.orders/);
+    assert.match(inspector.textContent, /Order facts/);
     canvas.dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 0, clientY: 0 }));
     assert.equal(graph.hasAttribute('title'), false);
     (document.getElementById('zoom-in') as HTMLButtonElement).click();
@@ -809,8 +807,7 @@ test('Entity tooltips and accessible details show metadata as text', () => {
     graph
       .querySelector('canvas')!
       .dispatchEvent(new dom.window.MouseEvent('mousemove', { bubbles: true, clientX: 500, clientY: 300 }));
-    assert.match(graph.title, /Description: <img/);
-    assert.match(graph.title, /owner: <img/);
+    assert.match((document.getElementById('selection-status') as HTMLElement).textContent, /owner/);
     (document.querySelector('#entity-results button') as HTMLButtonElement).click();
     assert.match((document.getElementById('selection-status') as HTMLElement).textContent, /owner/);
     assert.equal(document.querySelectorAll('#selection-status img').length, 0);
@@ -1350,11 +1347,11 @@ test('Entity drafts block saving and selection until applied or discarded', () =
     input.dispatchEvent(new Event('input', { bubbles: true }));
     assert.equal((document.getElementById('download-document') as HTMLButtonElement).disabled, true);
     assert.match((document.getElementById('document-status') as HTMLElement).textContent, /apply or discard/i);
-    (document.getElementById('inspector') as HTMLDetailsElement).open = false;
     (document.querySelector('#entity-results button[title="B"]') as HTMLButtonElement).click();
     assert.equal((document.getElementById('edit-entity-name') as HTMLInputElement).value, 'B');
     assert.match((document.getElementById('edit-entity-error') as HTMLElement).textContent, /apply or discard/i);
-    assert.equal((document.getElementById('inspector') as HTMLDetailsElement).open, true);
+    assert.equal((document.getElementById('draft-resolution') as HTMLElement).hidden, false);
+    (document.getElementById('draft-stay') as HTMLButtonElement).click();
     (document.getElementById('discard-entity-draft') as HTMLButtonElement).click();
     assert.equal((document.getElementById('download-document') as HTMLButtonElement).disabled, false);
     (document.querySelector('#entity-results button[title="B"]') as HTMLButtonElement).click();

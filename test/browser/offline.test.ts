@@ -312,6 +312,7 @@ test('keeps form drafts visible and blocks download and selection until resolved
     await page.locator('#entity-results button[title="B"]').click();
     assert.equal(await page.locator('#edit-entity-name').inputValue(), 'B');
     assert.match((await page.locator('#edit-entity-error').textContent())!, /apply or discard/i);
+    await page.getByRole('button', { name: 'Stay on current Entity' }).click();
     await page.locator('#discard-entity-draft').click();
     await page.locator('#new-dependency-name').fill(' A');
     await page.locator('#add-dependency-form button[type=submit]').click();
@@ -403,19 +404,11 @@ test('exposes safe details by keyboard and tooltip and retains graph views and P
       }),
     );
     await page.locator('#open-paste').click();
-    const graph = page.locator('#graph');
-    const bounds = await graph.boundingBox();
-    assert.ok(bounds);
-    let tooltip = '';
-    for (let y = bounds.y + 35; y < bounds.y + bounds.height - 35 && !tooltip.includes(hostile); y += 15) {
-      for (let x = bounds.x + 325; x < bounds.x + bounds.width - 35; x += 15) {
-        await page.mouse.move(x, y);
-        tooltip = (await graph.getAttribute('title')) || '';
-        if (tooltip.includes(hostile)) break;
-      }
-    }
-    assert.match(tooltip, /Description: <img/);
-    assert.match(tooltip, /owner: <img/);
+    const node = await page.getByRole('button', { name: 'Inspect Entity Report' }).boundingBox();
+    assert.ok(node);
+    await page.mouse.move(node.x + node.width / 2, node.y + node.height / 2);
+    assert.match((await page.locator('#selection-status').textContent())!, /owner/);
+    assert.equal(await page.locator('#inspector').isVisible(), true);
     await openFind(page);
     await page.locator('#entity-search').fill('Report');
     await page.locator('#entity-search').focus();
@@ -590,6 +583,242 @@ test('File opens the spacious JSON surface and copy fallback', async () => {
     await page.locator('#file-copy-document').click();
     assert.equal(await page.locator('#document-json').isVisible(), true);
     assert.match((await page.locator('#document-status').textContent())!, /select and copy/i);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('opens persistent Entity details from Find and closes them', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","description":"<img src=x>","dependencies":["missing"]}]}');
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    const result = page.locator('#entity-results button[title="A"]');
+    await result.click();
+    const card = page.getByRole('region', { name: 'Entity details' });
+    assert.equal(await card.isVisible(), true);
+    assert.match((await card.textContent())!, /<img src=x>/);
+    assert.equal(await card.locator('img').count(), 0);
+    await card.getByRole('button', { name: 'Close Entity details' }).click();
+    assert.equal(await card.isVisible(), false);
+    assert.equal(await result.evaluate((element) => element === document.activeElement), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('moves details by keyboard and updates in place until closed', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    const card = page.locator('#inspector');
+    const before = await card.boundingBox();
+    await page.getByRole('button', { name: 'Move card' }).click();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    const moved = await card.boundingBox();
+    assert.ok(before && moved && moved.y < before.y);
+    await page.locator('#entity-results button[title="B"]').focus();
+    assert.equal(await card.locator('h2').textContent(), 'B');
+    assert.deepEqual(await card.boundingBox(), moved);
+    await page.getByRole('button', { name: 'Close Entity details' }).click();
+    await page.locator('#entity-results button[title="A"]').click();
+    assert.notEqual((await card.boundingBox())!.y, moved.y);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('protects Entity drafts when another Entity is explicitly selected', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#edit-entity-name').fill('Changed');
+    await page.locator('#entity-results button[title="B"]').click();
+    assert.equal(await page.locator('#edit-entity-name').inputValue(), 'Changed');
+    await page.getByRole('button', { name: 'Stay on current Entity' }).click();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'A');
+    await page.locator('#entity-results button[title="B"]').click();
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Discard Entity draft' }).click();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'B');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('keyboard Entity controls open details without hover', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":["missing"]}]}');
+    await page.locator('#open-paste').click();
+    const entity = page.getByRole('button', { name: 'Inspect Entity missing (undocumented)' });
+    await entity.focus();
+    await page.keyboard.press('Space');
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'missing');
+    assert.match((await page.locator('#selection-status').textContent())!, /Unknown/);
+    assert.equal(await page.locator('#inspector').isVisible(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('opens property editing for the inspected Entity', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[],"owner":"team"}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="B"]').click();
+    await page.locator('#inspector').getByRole('button', { name: 'Edit properties' }).click();
+    assert.equal(await page.locator('#metadata-entity').inputValue(), 'B');
+    assert.equal(await page.locator('#metadata-panel').evaluate((element: HTMLDetailsElement) => element.open), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('touch inspection works with hover previews disabled and the card can be dragged', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ hasTouch: true, viewport: { width: 1200, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]}],"settings":{"tooltips":{"enabled":false}}}');
+    await page.locator('#open-paste').click();
+    const node = await page.getByRole('button', { name: 'Inspect Entity A' }).boundingBox();
+    assert.ok(node);
+    await page.mouse.move(node.x + node.width / 2, node.y + node.height / 2);
+    assert.equal(await page.locator('#inspector').isVisible(), false);
+    await page.touchscreen.tap(node.x + node.width / 2, node.y + node.height / 2);
+    const card = page.locator('#inspector');
+    assert.equal(await card.isVisible(), true);
+    const before = await card.boundingBox();
+    const header = await card.locator('.inspector-header').boundingBox();
+    assert.ok(before && header);
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: header.x + 15, y: header.y + 15 }],
+    });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: header.x - 45, y: header.y + 55 }],
+    });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const after = await card.boundingBox();
+    assert.ok(after && (after.x !== before.x || after.y !== before.y));
+  } finally {
+    await browser.close();
+  }
+});
+
+test('keeps moved card position after applying an Entity edit', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.getByRole('button', { name: 'Move card' }).click();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    const card = page.locator('#inspector');
+    const moved = await card.boundingBox();
+    await page.locator('#edit-entity-name').fill('Renamed');
+    await page.getByRole('button', { name: 'Apply Entity changes' }).click();
+    assert.equal(await card.locator('h2').textContent(), 'Renamed');
+    assert.deepEqual(await card.boundingBox(), moved);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('moved card protects Direct dependency drafts from automatic inspection and applies before switching', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.getByRole('button', { name: 'Move card' }).click();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    await page.locator('#new-dependency-name').fill('B');
+    await page.getByRole('button', { name: 'Inspect Entity B' }).focus();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'A');
+    assert.equal(await page.locator('#new-dependency-name').inputValue(), 'B');
+    await page.keyboard.press('Enter');
+    await page.locator('#draft-resolution').getByRole('button', { name: 'Apply Direct dependency draft' }).click();
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'B');
+    assert.match(await page.locator('#document-json').inputValue(), /"B"/);
+    assert.equal(await page.getByRole('button', { name: 'Edit', exact: true }).getAttribute('aria-pressed'), 'true');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('hover updates a moved card without announcing each inspection', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":["A"]}]}');
+    await page.locator('#open-paste').click();
+    await page.getByRole('button', { name: 'Inspect Entity A' }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Move card' }).click();
+    for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    const card = page.locator('#inspector');
+    const position = await card.boundingBox();
+    const announcement = await page.locator('#inspection-announcement').textContent();
+    const node = await page.getByRole('button', { name: 'Inspect Entity B' }).boundingBox();
+    assert.ok(node);
+    await page.mouse.move(node.x + node.width / 2, node.y + node.height / 2);
+    assert.equal(await card.locator('h2').textContent(), 'B');
+    assert.deepEqual(await card.boundingBox(), position);
+    assert.equal(await page.locator('#inspection-announcement').textContent(), announcement);
+    await page.mouse.move(2, 2);
+    assert.equal(await card.locator('h2').textContent(), 'B');
   } finally {
     await browser.close();
   }
