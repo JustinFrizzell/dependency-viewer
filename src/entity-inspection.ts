@@ -59,6 +59,7 @@ export function setupEntityInspection({
     }
     const form = document.createElement('form');
     form.id = 'edit-entity-form';
+    form.className = 'edit-only';
     form.noValidate = true;
     const nameLabel = document.createElement('label');
     nameLabel.htmlFor = 'edit-entity-name';
@@ -125,8 +126,10 @@ export function setupEntityInspection({
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.id = 'delete-entity';
+    deleteButton.className = 'edit-only';
     deleteButton.textContent = 'Remove Entity';
     const confirmation = document.createElement('fieldset');
+    confirmation.className = 'edit-only';
     confirmation.hidden = true;
     const prompt = document.createElement('legend');
     prompt.textContent =
@@ -225,6 +228,7 @@ export function setupEntityInspection({
           if (remove) {
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
+            removeButton.className = 'edit-only';
             removeButton.textContent = 'Remove';
             removeButton.setAttribute('aria-label', `Remove Direct dependency ${relatedName}`);
             removeButton.addEventListener('click', () => remove(relatedName));
@@ -266,6 +270,7 @@ export function setupEntityInspection({
     if (entity.documented) {
       const form = document.createElement('form');
       form.id = 'add-dependency-form';
+      form.className = 'edit-only';
       form.noValidate = true;
       const label = document.createElement('label');
       label.htmlFor = 'new-dependency-name';

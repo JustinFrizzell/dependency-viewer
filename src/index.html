@@ -9,11 +9,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dependency viewer</title>
   </head>
-  <body>
+  <body data-mode="view">
     <header>
       <h1>Dependency viewer</h1>
       <span>Entity dependency</span>
+      <div role="group" aria-label="Document mode">
+        <button id="mode-view" type="button" aria-pressed="true">View</button>
+        <button id="mode-edit" type="button" aria-pressed="false" disabled>Edit</button>
+      </div>
     </header>
+    <section id="draft-resolution" class="document-panel" aria-label="Resolve drafts before leaving Edit" hidden>
+      <p>Apply or discard each draft before leaving Edit. If drafts conflict, discard one before applying another.</p>
+      <div id="draft-resolution-actions"></div>
+      <p id="draft-resolution-error" role="alert"></p>
+      <button id="draft-stay" type="button">Stay in Edit</button>
+    </section>
     <section id="file-panel" class="file-panel" aria-label="Dependency file">
       <label for="dependency-file">Choose dependency JSON</label>
       <input id="dependency-file" type="file" accept=".json,application/json" />
@@ -69,17 +79,17 @@
       <summary>Opened Document <span id="unsaved-indicator"></span></summary>
       <label for="document-json">Document JSON draft</label>
       <textarea id="document-json" rows="8" spellcheck="false"></textarea>
-      <button id="apply-document" type="button">Apply JSON draft</button>
-      <button id="discard-document" type="button">Discard JSON draft</button>
-      <button id="undo-document" type="button">Undo</button>
-      <button id="redo-document" type="button">Redo</button>
+      <button class="edit-only" id="apply-document" type="button">Apply JSON draft</button>
+      <button class="edit-only" id="discard-document" type="button">Discard JSON draft</button>
+      <button class="edit-only" id="undo-document" type="button">Undo</button>
+      <button class="edit-only" id="redo-document" type="button">Redo</button>
       <button id="settings-entry" type="button" aria-controls="colour-settings">Settings</button>
       <p id="document-error" role="alert"></p>
       <button id="copy-document" type="button">Copy Document</button>
       <button id="download-document" type="button">Download Document</button>
       <span id="document-status" role="status"></span>
     </details>
-    <details id="add-entity-panel" class="document-panel" hidden>
+    <details id="add-entity-panel" class="document-panel edit-only" hidden>
       <summary>Add Entity</summary>
       <form id="add-entity-form" novalidate>
         <label for="new-entity-name">Entity name</label>
@@ -91,7 +101,7 @@
         <p id="add-entity-error" role="alert"></p>
       </form>
     </details>
-    <details id="metadata-panel" class="document-panel" hidden>
+    <details id="metadata-panel" class="document-panel edit-only" hidden>
       <summary>Edit Entity properties</summary>
       <form id="metadata-form" novalidate>
         <label for="metadata-entity">Entity</label>
@@ -125,20 +135,22 @@
       <details id="colour-settings" open hidden>
         <summary>Settings</summary>
         <div class="colour-settings-content">
-          <div class="colour-settings-actions">
-            <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
-            <button id="reset-colours" type="button">Reset</button>
-          </div>
-          <p>Colour entities when their full name contains this text. The first match wins.</p>
-          <p id="colour-error" role="alert"></p>
-          <div id="colour-rules"></div>
-          <section class="presentation-settings" aria-labelledby="presentation-heading">
-            <h3 id="presentation-heading">Graph presentation</h3>
-            <label><input id="compact-nodes" type="checkbox" /> Compact nodes</label>
-            <label><input id="tooltips-enabled" type="checkbox" checked /> Show hover tooltips</label>
-            <button id="reset-presentation" type="button">Reset presentation</button>
-            <p id="presentation-error" role="alert"></p>
-          </section>
+          <fieldset id="document-settings-fields">
+            <div class="colour-settings-actions">
+              <label><input id="colours-enabled" type="checkbox" checked /> Colour entities</label>
+              <button id="reset-colours" type="button">Reset</button>
+            </div>
+            <p>Colour entities when their full name contains this text. The first match wins.</p>
+            <p id="colour-error" role="alert"></p>
+            <div id="colour-rules"></div>
+            <section class="presentation-settings" aria-labelledby="presentation-heading">
+              <h3 id="presentation-heading">Graph presentation</h3>
+              <label><input id="compact-nodes" type="checkbox" /> Compact nodes</label>
+              <label><input id="tooltips-enabled" type="checkbox" checked /> Show hover tooltips</label>
+              <button id="reset-presentation" type="button">Reset presentation</button>
+              <p id="presentation-error" role="alert"></p>
+            </section>
+          </fieldset>
         </div>
       </details>
       <div id="dependency-views" aria-label="Dependency view" hidden>

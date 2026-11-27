@@ -18,6 +18,7 @@ let cleanupGraph = () => {};
 let resizeGraph = () => {};
 let selection = 0;
 let session: DocumentSession | null = null;
+let mode: 'view' | 'edit' = 'view';
 let documentName = 'dependency-document.json';
 const metadataEntity = document.getElementById('metadata-entity') as HTMLSelectElement;
 const metadataProperty = document.getElementById('metadata-property') as HTMLSelectElement;
@@ -89,6 +90,11 @@ function openDocument(raw: string, name: string) {
   }
   if (isUnsaved() && !window.confirm('Replace the Document and lose unsaved changes and drafts?')) return;
   session = createDocumentSession(nextDocument);
+  mode = 'view';
+  (document.getElementById('draft-resolution') as HTMLElement).hidden = true;
+  for (const id of ['document-panel', 'add-entity-panel', 'metadata-panel']) {
+    (document.getElementById(id) as HTMLDetailsElement).open = false;
+  }
   inspection = null;
   newEntityRejected = false;
   documentName = name;
@@ -103,6 +109,7 @@ function openDocument(raw: string, name: string) {
   renderGraph(graph);
   fileError.textContent = '';
   (document.getElementById('file-name') as HTMLElement).textContent = name;
+  updateDocumentControls();
 }
 
 function renderGraph(graph: Graph, selectedName?: string) {
@@ -134,6 +141,7 @@ function renderGraph(graph: Graph, selectedName?: string) {
     (document.getElementById('status') as HTMLElement).textContent = 'No entities in this dependency dataset.';
     setupDocumentSettings({ nodes: () => [] } as unknown as cytoscape.Core);
   }
+  updateDocumentControls();
 }
 
 function updateDocumentControls() {
@@ -143,6 +151,12 @@ function updateDocumentControls() {
   const editor = document.getElementById('document-json') as HTMLTextAreaElement;
   if (editor.value !== session.draft()) editor.value = session.draft();
   editor.disabled = formDraft;
+  editor.readOnly = mode === 'view';
+  document.body.dataset.mode = mode;
+  (document.getElementById('mode-view') as HTMLButtonElement).setAttribute('aria-pressed', String(mode === 'view'));
+  (document.getElementById('mode-edit') as HTMLButtonElement).setAttribute('aria-pressed', String(mode === 'edit'));
+  (document.getElementById('mode-edit') as HTMLButtonElement).disabled = false;
+  (document.getElementById('document-settings-fields') as HTMLFieldSetElement).disabled = mode === 'view';
   (document.getElementById('unsaved-indicator') as HTMLElement).textContent = isUnsaved() ? '— Unsaved changes' : '';
   (document.getElementById('apply-document') as HTMLButtonElement).disabled = !session.hasDraft() || formDraft;
   (document.getElementById('discard-document') as HTMLButtonElement).disabled = !session.hasDraft();
@@ -159,6 +173,108 @@ function updateDocumentControls() {
   (document.getElementById('metadata-remove') as HTMLButtonElement).disabled =
     metadataDraft || metadataProperty.value === '';
 }
+
+(document.getElementById('mode-edit') as HTMLButtonElement).addEventListener('click', () => {
+  if (!session) return;
+  resolutionPanel.hidden = true;
+  mode = 'edit';
+  updateDocumentControls();
+});
+const resolutionPanel = document.getElementById('draft-resolution') as HTMLElement;
+const resolutionActions = document.getElementById('draft-resolution-actions') as HTMLElement;
+const resolutionError = document.getElementById('draft-resolution-error') as HTMLElement;
+function drafts() {
+  return [
+    {
+      name: 'JSON',
+      active: () => session!.hasDraft(),
+      apply: '#apply-document',
+      discard: '#discard-document',
+      error: '#document-error',
+    },
+    {
+      name: 'property',
+      active: hasMetadataDraft,
+      apply: '#metadata-form',
+      discard: '#metadata-discard',
+      error: '#metadata-error',
+    },
+    {
+      name: 'Entity',
+      active: hasEntityDraft,
+      apply: '#edit-entity-form',
+      discard: '#discard-entity-draft',
+      error: '#edit-entity-error',
+    },
+    {
+      name: 'Direct dependency',
+      active: hasDependencyDraft,
+      apply: '#add-dependency-form',
+      discard: '#discard-dependency-draft',
+      error: '#dependency-error',
+    },
+    {
+      name: 'new Entity',
+      active: hasNewEntityDraft,
+      apply: '#add-entity-form',
+      discard: '#discard-new-entity-draft',
+      error: '#add-entity-error',
+    },
+  ].filter((draft) => draft.active());
+}
+function showDraftResolution() {
+  const pending = drafts();
+  resolutionActions.replaceChildren();
+  if (!pending.length) {
+    resolutionPanel.hidden = true;
+    mode = 'view';
+    updateDocumentControls();
+    (document.getElementById('mode-view') as HTMLButtonElement).focus();
+    return;
+  }
+  resolutionPanel.hidden = false;
+  for (const draft of pending) {
+    const row = document.createElement('div');
+    for (const action of ['apply', 'discard'] as const) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = `${action === 'apply' ? 'Apply' : 'Discard'} ${draft.name} draft`;
+      button.addEventListener('click', () => {
+        resolutionError.textContent = '';
+        if (!draft.active()) {
+          showDraftResolution();
+          return;
+        }
+        if (action === 'apply' && drafts().length > 1) {
+          resolutionError.textContent = 'Discard conflicting drafts before applying another draft.';
+          return;
+        }
+        const target = document.querySelector<HTMLElement>(draft[action])!;
+        if (target instanceof HTMLFormElement) target.requestSubmit();
+        else target.click();
+        if (draft.active()) {
+          resolutionError.textContent =
+            document.querySelector<HTMLElement>(draft.error)?.textContent || 'Draft could not be applied.';
+        } else {
+          showDraftResolution();
+        }
+      });
+      row.appendChild(button);
+    }
+    resolutionActions.appendChild(row);
+  }
+  resolutionActions.querySelector<HTMLButtonElement>('button')?.focus();
+}
+(document.getElementById('draft-stay') as HTMLButtonElement).addEventListener('click', () => {
+  resolutionPanel.hidden = true;
+  resolutionError.textContent = '';
+  (document.getElementById('mode-edit') as HTMLButtonElement).focus();
+});
+(document.getElementById('mode-view') as HTMLButtonElement).addEventListener('click', () => {
+  if (!session) return;
+  resolutionError.textContent = '';
+  showDraftResolution();
+});
 
 function refreshDocument(selectedName?: string) {
   resetMetadata(selectedName);
@@ -366,10 +482,10 @@ window.addEventListener('beforeunload', (event) => {
 });
 
 fileInput.addEventListener('change', () => {
+  const current = ++selection;
   const file = fileInput.files![0];
   if (!file) return;
   fileInput.value = '';
-  const current = ++selection;
   const reader = new FileReader();
   reader.onload = () => {
     if (current !== selection) return;
@@ -383,6 +499,9 @@ fileInput.addEventListener('change', () => {
   } catch {
     if (current === selection) fileError.textContent = 'Error: could not read the selected file. Choose it again.';
   }
+});
+fileInput.addEventListener('cancel', () => {
+  selection++;
 });
 
 document.addEventListener('click', (event) => {
