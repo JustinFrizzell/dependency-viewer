@@ -544,6 +544,17 @@ button:hover {
 body[data-mode='view'] .edit-only {
   display: none;
 }
+#inspector:not(.editor-open) :is(#edit-entity-form, #add-dependency-form, .entity-edit-control) {
+  display: none;
+}
+#inspector.editor-open {
+  width: min(600px, calc(100vw - 24px));
+  max-height: min(80vh, 760px);
+}
+.entity-editor-toggle {
+  display: block;
+  margin-top: 10px;
+}
 
 /* The graph remains the workspace; controls and editors float above it. */
 body {
@@ -1080,4 +1091,469 @@ header label {
 :root[data-theme='dark'] .inspector-header {
   color: #edf5f5;
   background: #29444f;
+}
+
+#toggle-controls,
+#small-screen-notice {
+  position: fixed;
+  z-index: 20;
+}
+#toggle-controls {
+  top: 8px;
+  left: 8px;
+}
+#small-screen-notice:not([hidden]) {
+  right: 8px;
+  bottom: 8px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 8px 12px;
+  background: #fff3d8;
+  color: #523700;
+  border: 1px solid #956000;
+  border-radius: 8px;
+  pointer-events: none;
+}
+#dismiss-small-screen {
+  pointer-events: auto;
+}
+body[data-small-screen='true'][data-controls-open='false'] header,
+body[data-small-screen='true'][data-controls-open='false'] .workspace-toolbar,
+body[data-small-screen='true'][data-controls-open='false'] .controls {
+  display: none;
+}
+body[data-small-screen='true'][data-controls-open='true'] header {
+  top: 50px;
+  max-height: 35vh;
+  overflow: auto;
+}
+
+/* Anchored workspace surfaces */
+:root {
+  --surface: #fff;
+  --canvas: #f7f8fa;
+  --ink: #1b1e29;
+  --muted: #596275;
+  --accent: #4f46e5;
+  --accent-soft: #eeedff;
+  --surface-border: #b6bdcc;
+  --surface-shadow: 0 12px 40px #18203612, 0 2px 8px #1820360a;
+}
+:root[data-theme='dark'] {
+  --surface: #191c24;
+  --canvas: #0e1016;
+  --ink: #f2f3f8;
+  --muted: #b8bfce;
+  --accent: #a59bff;
+  --accent-soft: #302d50;
+  --surface-border: #8a94a5;
+  --surface-shadow: 0 16px 40px #0007, 0 2px 8px #0005;
+}
+:root[data-theme='dark'] button,
+:root[data-theme='dark'] input:not([type='checkbox'], [type='file']),
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea,
+:root[data-theme='dark']
+  :is(#filter-menu, #export-menu, #document-panel, #add-entity-panel, #metadata-panel)
+  > summary {
+  background: #252b36;
+}
+:root[data-theme='dark']
+  :is(.entity-list-content, .colour-settings-content, .filter-menu-content, .export-menu-content) {
+  background: var(--surface);
+}
+:root[data-theme='dark'] .graph-entity-icon {
+  color: #b8afff;
+  background: #302d50;
+}
+main,
+:root[data-theme='dark'] main {
+  background-color: var(--canvas);
+  background-image: radial-gradient(#cfd4e0 0.85px, transparent 0.85px);
+  background-size: 22px 22px;
+}
+:root[data-theme='dark'] main {
+  background-image: radial-gradient(#292e3a 0.85px, transparent 0.85px);
+}
+header,
+:root[data-theme='dark'] header {
+  z-index: 12;
+  top: 18px;
+  left: 20px;
+  right: 20px;
+  min-height: 56px;
+  padding: 8px;
+  gap: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 14px;
+  box-shadow: var(--surface-shadow);
+}
+#draft-resolution:not([hidden]) {
+  z-index: 16;
+}
+body[data-loaded] .file-panel:not([hidden]) {
+  z-index: 15;
+}
+header:has(#entity-list[open], #colour-settings[open], #export-menu[open], #metadata-panel[open]) {
+  z-index: 14;
+}
+.workspace-toolbar {
+  z-index: 14;
+}
+#inspector.editor-open {
+  z-index: 13;
+}
+header h1::before {
+  content: '⌘';
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 9px;
+  color: white;
+  background: #4f46e5;
+  border-radius: 9px;
+}
+header span,
+header label,
+#unsaved-indicator {
+  color: var(--ink);
+}
+header h1 {
+  white-space: nowrap;
+}
+.mode-switch {
+  display: flex;
+  padding: 3px;
+  background: var(--canvas);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+}
+header .mode-switch button,
+:root[data-theme='dark'] header .mode-switch button {
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+header .mode-switch button[aria-pressed='true'],
+:root[data-theme='dark'] header .mode-switch button[aria-pressed='true'] {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 3px #0002;
+}
+header #toggle-theme,
+:root[data-theme='dark'] header #toggle-theme {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 18px;
+}
+header #toggle-theme:hover,
+:root[data-theme='dark'] header #toggle-theme:hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+header #entity-list:not([hidden]),
+header #colour-settings:not([hidden]),
+header #export-menu {
+  position: relative;
+  inset: auto;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  box-shadow: none;
+}
+header #entity-list:not([hidden]) {
+  margin-left: auto;
+}
+header #entity-list summary,
+header #colour-settings summary {
+  padding: 8px 12px;
+}
+header .colour-settings-content {
+  left: auto;
+  right: 0;
+}
+.workspace-toolbar {
+  left: 20px;
+  right: auto;
+}
+#dependency-views:not([hidden]) {
+  padding: 4px;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  box-shadow: var(--surface-shadow);
+}
+#dependency-views button,
+#dependency-views summary {
+  font-size: 12px;
+}
+#graph-count:not(:empty),
+.controls {
+  bottom: 22px;
+  padding: 5px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  box-shadow: var(--surface-shadow);
+}
+#graph-count:not(:empty) {
+  left: 24px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.controls {
+  right: 22px;
+}
+#inspector,
+:root[data-theme='dark'] #inspector {
+  width: min(340px, calc(100vw - 24px));
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--surface-border);
+  border-radius: 15px;
+  box-shadow: var(--surface-shadow);
+}
+#inspector.editor-open,
+:root[data-theme='dark'] #inspector.editor-open {
+  width: min(600px, calc(100vw - 24px));
+}
+.inspector-header,
+:root[data-theme='dark'] .inspector-header {
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--surface-border);
+  font-size: 11px;
+}
+#selection-status {
+  padding: 16px 18px;
+}
+#inspector h2,
+:root[data-theme='dark'] #inspector h2 {
+  color: var(--ink);
+}
+.documented-badge {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+#inspector h3,
+:root[data-theme='dark'] #inspector h3 {
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+.related-entity {
+  width: 100%;
+  margin: 3px 0;
+  padding: 7px 9px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+}
+.graph-entity-decoration {
+  position: absolute;
+  pointer-events: none;
+}
+.graph-entity-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  transform: translateY(-50%);
+  color: #4f46e5;
+  background: #eeedff;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.graph-entity-prefix {
+  position: absolute;
+  top: calc(50% + 7px);
+  left: 52px;
+  right: 8px;
+  overflow: hidden;
+  color: inherit;
+  opacity: 0.8;
+  font-size: 11px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-small-screen='true'][data-controls-open='true'] header {
+  top: 50px;
+  left: 8px;
+  right: 8px;
+}
+body[data-small-screen='true'] .workspace-toolbar {
+  left: 8px;
+  right: 8px;
+}
+body[data-small-screen='true'][data-controls-open='true'] #graph-count:not(:empty) {
+  bottom: 76px;
+}
+body[data-small-screen='true']
+  :is(.entity-list-content, .colour-settings-content, .export-menu-content, .filter-menu-content) {
+  position: fixed;
+  top: var(--editor-top, 120px);
+  left: 8px;
+  right: auto;
+  max-height: max(80px, calc(100vh - var(--editor-top, 120px) - 8px));
+  overflow: auto;
+}
+body[data-small-screen='true']:has(#small-screen-notice:not([hidden])) .entity-list-content {
+  --find-top: min(var(--editor-top, 120px), max(8px, calc(100vh - var(--small-notice-height, 90px) - 168px)));
+  top: var(--find-top);
+  max-height: max(0px, calc(100vh - var(--find-top) - var(--small-notice-height, 90px) - 16px));
+}
+
+/* Prototype-inspired top bar */
+:root {
+  --bar-line: #e4e6eb;
+}
+:root[data-theme='dark'] {
+  --bar-line: #303440;
+}
+header,
+:root[data-theme='dark'] header {
+  border-color: var(--bar-line);
+}
+header h1 {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+header h1::after {
+  content: '';
+  width: 1px;
+  height: 26px;
+  margin-left: 12px;
+  background: var(--bar-line);
+}
+header :is(#toggle-file-panel, #undo-document, #redo-document),
+header :is(#entity-list, #colour-settings, #export-menu, #document-panel, #add-entity-panel, #metadata-panel) > summary,
+:root[data-theme='dark'] header :is(#toggle-file-panel, #undo-document, #redo-document),
+:root[data-theme='dark']
+  header
+  :is(#entity-list, #colour-settings, #export-menu, #document-panel, #add-entity-panel, #metadata-panel)
+  > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+header
+  :is(#entity-list, #colour-settings, #export-menu, #document-panel, #add-entity-panel, #metadata-panel)
+  > summary::-webkit-details-marker {
+  display: none;
+}
+header :is(#toggle-file-panel, #export-menu > summary),
+:root[data-theme='dark'] header :is(#toggle-file-panel, #export-menu > summary) {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--bar-line);
+}
+header :is(#toggle-file-panel, #undo-document, #redo-document, summary):hover,
+:root[data-theme='dark'] header :is(#toggle-file-panel, #undo-document, #redo-document, summary):hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+body[data-mode='view'] header :is(#undo-document, #redo-document) {
+  display: none;
+}
+header :is(#entity-list, #colour-settings):not([hidden]),
+:root[data-theme='dark'] header :is(#entity-list, #colour-settings):not([hidden]) {
+  background: transparent;
+  border: 0;
+}
+header #entity-list:not([hidden]) {
+  margin-left: auto;
+}
+header :is(.entity-list-content, .colour-settings-content, .export-menu-content) {
+  position: fixed;
+  top: var(--toolbar-top, 76px);
+  right: 20px;
+  left: auto;
+}
+#document-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#unsaved-indicator:not(:empty) {
+  color: var(--accent);
+}
+header .mode-switch {
+  border-color: var(--bar-line);
+}
+#graph-filter-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--canvas);
+  border: 1px solid var(--bar-line);
+  border-radius: 8px;
+}
+header #graph-filter-control > span {
+  color: var(--muted);
+  font-size: 18px;
+}
+header #graph-filter,
+:root[data-theme='dark'] header #graph-filter {
+  width: 120px;
+  min-width: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+}
+#graph-filter::-webkit-search-cancel-button {
+  display: none;
+}
+header #clear-graph-filter,
+:root[data-theme='dark'] header #clear-graph-filter {
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+#clear-graph-filter[hidden] {
+  display: none;
+}
+@media (max-width: 1000px) {
+  header #entity-list:not([hidden]) {
+    margin-left: 0;
+  }
 }

@@ -42,15 +42,24 @@ async function openFind(page: Page) {
   if (!(await list.evaluate((element: HTMLDetailsElement) => element.open))) await list.locator('summary').click();
 }
 
+async function openEntityEditor(page: Page) {
+  if (!(await page.locator('#edit-entity-form').isVisible())) {
+    await page.getByRole('button', { name: 'Edit Entity', exact: true }).click();
+  }
+}
+
 async function openFilter(page: Page) {
-  const menu = page.locator('#filter-menu');
-  if (!(await menu.evaluate((element: HTMLDetailsElement) => element.open))) await menu.locator('summary').click();
+  await page.locator('#graph-filter').focus();
 }
 
 async function openSettings(page: Page) {
   const settings = page.locator('#colour-settings');
   if (!(await settings.evaluate((element: HTMLDetailsElement) => element.open)))
     await settings.locator('summary').click();
+}
+
+async function setTheme(page: Page, theme: 'light' | 'dark') {
+  if ((await page.locator('html').getAttribute('data-theme')) !== theme) await page.locator('#toggle-theme').click();
 }
 
 function trackExternalRequests(page: Page) {
@@ -74,6 +83,210 @@ function contrast(first: string, second: string) {
   const values = [luminance(first), luminance(second)].sort((a, b) => a - b);
   return (values[1] + 0.05) / (values[0] + 0.05);
 }
+
+test('small workspace controls can be reopened and the notice returns only on re-entry', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 679, height: 600 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), true);
+    assert.equal(await page.locator('#toggle-controls').getAttribute('aria-expanded'), 'false');
+    await page.locator('#dismiss-small-screen').click();
+    await page.locator('#toggle-controls').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#mode-view').isVisible(), true);
+    await openSettings(page);
+    assert.equal(await page.locator('#colours-enabled').isVisible(), true);
+    await page.locator('#colour-settings summary').click();
+    await page.locator('#toggle-controls').click();
+    assert.equal(
+      await page.locator('#toggle-controls').evaluate((element) => element === document.activeElement),
+      true,
+    );
+    await page.setViewportSize({ width: 800, height: 600 });
+    await page.waitForFunction(() => document.body.dataset.smallScreen === 'false');
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), false);
+    await page.setViewportSize({ width: 800, height: 499 });
+    await page.waitForFunction(() => document.body.dataset.smallScreen === 'true');
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Find results remain clickable while the small screen notice is visible', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 320, height: 500 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill(
+      JSON.stringify({
+        entities: Array.from({ length: 10 }, (_, index) => ({ name: `Entity ${index}`, dependencies: [] })),
+      }),
+    );
+    await page.locator('#open-paste').click();
+    await page.locator('#toggle-controls').click();
+    await openFind(page);
+    const find = (await page.locator('.entity-list-content').boundingBox())!;
+    const notice = (await page.locator('#small-screen-notice').boundingBox())!;
+    assert.ok(find.y + find.height <= notice.y, 'Find results must not be obscured by the notice');
+    await page.locator('#entity-results button[title="Entity 0"]').click({ timeout: 5000 });
+    assert.equal(await page.locator('#selection-status h2').textContent(), 'Entity 0');
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), true);
+    await page.locator('#dismiss-small-screen').click();
+    assert.equal(await page.locator('#small-screen-notice').isVisible(), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('property editing remains usable after minimizing controls on a small screen', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 375, height: 667 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[],"custom":1}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#dismiss-small-screen').click();
+    await page.locator('#toggle-controls').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await page.locator('#toggle-controls').click();
+    await openEntityEditor(page);
+    await page.getByRole('button', { name: 'Edit properties' }).click();
+    assert.equal(await page.locator('#metadata-property').isVisible(), true);
+    await page.locator('#metadata-property').selectOption({ label: 'custom' });
+    await page.locator('#metadata-value').fill('2');
+    await page.locator('#metadata-form button[type=submit]').click();
+    assert.equal(JSON.parse(await page.locator('#document-json').inputValue()).entities[0].custom, 2);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('closing a details card with a hidden Entity draft exposes its safeguard', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
+    await page.locator('#edit-entity-name').fill('Renamed');
+    await page.getByRole('button', { name: 'Close editor' }).click();
+    await page.locator('#close-inspector').click();
+    assert.equal(await page.locator('#edit-entity-error').isVisible(), true);
+    assert.match((await page.locator('#edit-entity-error').textContent())!, /apply or discard/i);
+    await page.locator('#discard-entity-draft').click();
+    await page.locator('#close-inspector').click();
+    assert.equal(await page.locator('#inspector').isVisible(), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('closing a card with a hidden Direct dependency draft returns focus to the draft', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page
+      .locator('#paste-json')
+      .fill('{"entities":[{"name":"A","dependencies":[]},{"name":"B","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
+    await page.locator('#new-dependency-name').fill('B');
+    await page.getByRole('button', { name: 'Close editor' }).click();
+    await page.locator('#close-inspector').click();
+    assert.equal(
+      await page.locator('#new-dependency-name').evaluate((element) => element === document.activeElement),
+      true,
+    );
+    assert.match((await page.locator('#dependency-error').textContent())!, /apply or discard/i);
+    await page.locator('#add-dependency-form button[type=submit]').click();
+    assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[0].dependencies, ['B']);
+    await page.locator('#close-inspector').click();
+    assert.equal(await page.locator('#inspector').isVisible(), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Entity editing is explicitly opened from the compact details card', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"raw.orders","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    await page.locator('#mode-edit').click();
+    await openFind(page);
+    await page.getByRole('button', { name: 'raw.orders', exact: true }).click();
+    assert.equal(await page.locator('#edit-entity-form').isVisible(), false);
+    await page.getByRole('button', { name: 'Edit Entity', exact: true }).click();
+    assert.equal(await page.locator('#edit-entity-form').isVisible(), true);
+    assert.equal(await page.locator('#add-dependency-form').isVisible(), true);
+    await page.locator('#edit-entity-name').fill('raw.renamed');
+    await page.locator('#mode-view').click();
+    assert.equal(
+      await page.locator('#draft-resolution').getByRole('button', { name: 'Discard Entity draft' }).isVisible(),
+      true,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test('workspace separates Document actions from dependency views and shows Entity name parts', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser);
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"warehouse.raw.orders","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    assert.equal(await page.locator('header #entity-list').isVisible(), true);
+    assert.equal(await page.locator('header #colour-settings').isVisible(), true);
+    assert.equal(await page.locator('header #export-menu').isVisible(), true);
+    assert.equal(await page.locator('.workspace-toolbar #dependency-views').isVisible(), true);
+    assert.equal(await page.locator('.graph-entity-prefix').textContent(), 'warehouse.raw');
+    assert.equal(await page.getByRole('button', { name: 'Inspect Entity warehouse.raw.orders' }).count(), 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('PNG exports distinguish Entities with the same final name but different prefixes', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { acceptDownloads: true });
+    await page.goto(viewer);
+    const exportEntity = async (name: string) => {
+      await page.locator('#paste-json').fill(JSON.stringify({ entities: [{ name, dependencies: [] }] }));
+      await page.locator('#open-paste').click();
+      await page.locator('#export-menu summary').click();
+      const download = page.waitForEvent('download');
+      await page.locator('#export-png').click();
+      const chunks: Buffer[] = [];
+      for await (const chunk of await (await download).createReadStream()) chunks.push(chunk);
+      return Buffer.concat(chunks);
+    };
+    const first = await exportEntity('raw.orders');
+    await page.locator('#toggle-file-panel').click();
+    const second = await exportEntity('stage.orders');
+    assert.notDeepEqual(first, second);
+  } finally {
+    await browser.close();
+  }
+});
 
 test('blank canvas mouse click opens creation but panning and touch do not', async () => {
   const browser = await chromium.launch({ headless: true });
@@ -152,6 +365,7 @@ test('renaming and removing an undocumented Entity changes references without cr
     await page.locator('#mode-edit').click();
     await openFind(page);
     await page.locator('#entity-results button[title="Missing (undocumented)"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('External');
     await page.locator('#edit-entity-form button[type=submit]').click();
     assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
@@ -250,6 +464,7 @@ test('contextual Entity changes and deletion choices preserve references and und
     await page.locator('#mode-edit').click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('Missing');
     await page.locator('#edit-entity-form button[type=submit]').click();
     assert.match((await page.locator('#edit-entity-error').textContent())!, /exists/i);
@@ -264,6 +479,7 @@ test('contextual Entity changes and deletion choices preserve references and und
     await page.locator('#metadata-form button[type=submit]').click();
     data = JSON.parse(await page.locator('#document-json').inputValue());
     assert.deepEqual(data.entities[0].custom, { keep: false, values: [1, null] });
+    await page.locator('#metadata-panel summary').click();
     await page.locator('#delete-entity').click();
     await page.locator('#delete-entity-cancel').click();
     assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), data);
@@ -273,6 +489,7 @@ test('contextual Entity changes and deletion choices preserve references and und
     await page.locator('#undo-document').click();
     await openFind(page);
     await page.locator('#entity-results button[title="Renamed"]').click();
+    await openEntityEditor(page);
     await page.locator('#delete-entity').click();
     await page.locator('#delete-entity-remove').click();
     data = JSON.parse(await page.locator('#document-json').inputValue());
@@ -326,14 +543,21 @@ test('theme text and essential controls meet contrast targets', async () => {
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
     for (const theme of ['light', 'dark']) {
-      await page.getByLabel('Theme').selectOption(theme);
-      for (const selector of ['#inspector', '#zoom-in', '#graph-count', '#filter-menu summary', '#theme-preference']) {
+      await setTheme(page, theme as 'light' | 'dark');
+      for (const selector of [
+        '#inspector',
+        '#zoom-in',
+        '#graph-count',
+        '#graph-filter-control',
+        '#theme-preference',
+        '#mode-view',
+      ]) {
         const colours = await page.locator(selector).evaluate((element) => {
           const style = getComputedStyle(element);
           return [style.color, style.backgroundColor, style.borderTopColor];
         });
         assert.ok(contrast(colours[0], colours[1]) >= 4.5, `${theme} ${selector} text`);
-        if (selector === '#zoom-in' || selector === '#filter-menu summary') {
+        if (selector === '#zoom-in') {
           assert.ok(contrast(colours[2], colours[1]) >= 3, `${theme} ${selector} boundary`);
         }
       }
@@ -387,7 +611,7 @@ test('dark graph and white PNG retain colour rules, connections and selection', 
         '{"entities":[{"name":"bronze A","dependencies":["Missing"]},{"name":"Plain","dependencies":["bronze A"]}]}',
       );
     await page.locator('#open-paste').click();
-    await page.getByLabel('Theme').selectOption('dark');
+    await setTheme(page, 'dark');
     await openFind(page);
     await page.locator('#entity-results button[title="Plain"]').click();
     await page.getByRole('button', { name: 'Close Entity details' }).click();
@@ -411,7 +635,7 @@ test('dark graph and white PNG retain colour rules, connections and selection', 
       }
       return result;
     }, screenshot.toString('base64'));
-    assert.ok(counts['37,61,72'] > 50, 'uncoloured nodes use the dark graph palette');
+    assert.ok(counts['25,28,36'] > 50, 'uncoloured nodes use the dark graph palette');
     assert.ok(counts['233,201,173'] > 50, 'rule colours remain unchanged');
     assert.ok(counts['101,221,202'] > 20, 'selection outline is visible');
     assert.ok(counts['245,203,120'] > 20, 'undocumented outline is visible');
@@ -442,6 +666,39 @@ test('dark graph and white PNG retain colour rules, connections and selection', 
     assert.ok(exportCounts['233,201,173'] > 50, 'displayed colour rule');
     assert.ok(exportCounts['8,124,114'] > 20, 'selection outline visible on white');
     assert.ok(exportCounts['96,125,135'] > 20, 'edges visible on white');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('prototype controls toggle the theme and wider nodes retain compact mode', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { colorScheme: 'light' });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"warehouse.orders","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    const mode = page.getByRole('group', { name: 'Document mode' });
+    assert.equal(await mode.locator('#mode-view').getAttribute('aria-pressed'), 'true');
+    assert.equal(await mode.evaluate((element) => getComputedStyle(element).display), 'flex');
+    assert.equal(await page.locator('.graph-entity-decoration').evaluate((element) => element.style.width), '210px');
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+    assert.equal(await page.getByRole('button', { name: 'Switch to light mode' }).textContent(), '☀');
+    assert.equal(await page.evaluate(() => localStorage.getItem('dependency-viewer-theme')), 'dark');
+    await page.locator('#mode-edit').click();
+    assert.equal(await mode.locator('#mode-edit').getAttribute('aria-pressed'), 'true');
+    await openSettings(page);
+    await page.locator('#compact-nodes').check();
+    await page.waitForFunction(
+      () => document.querySelector<HTMLElement>('.graph-entity-decoration')?.style.width === '174px',
+    );
+    await page.locator('#toggle-file-panel').click();
+    await page.getByLabel('Theme').selectOption('system');
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    assert.equal(await page.getByRole('button', { name: 'Switch to light mode' }).textContent(), '☀');
   } finally {
     await browser.close();
   }
@@ -516,7 +773,7 @@ test('switching themes preserves Document settings, history and session state', 
     await page.locator('#paste-json').fill(JSON.stringify(original));
     await page.locator('#open-paste').click();
     const before = await page.locator('#document-json').inputValue();
-    await page.getByLabel('Theme').selectOption('dark');
+    await setTheme(page, 'dark');
     assert.equal(await page.locator('#document-json').inputValue(), before);
     assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -527,7 +784,7 @@ test('switching themes preserves Document settings, history and session state', 
     assert.equal(await page.getByLabel('Text for bronze colour').inputValue(), 'A');
     await page.locator('#compact-nodes').uncheck();
     const changed = await page.locator('#document-json').inputValue();
-    await page.getByLabel('Theme').selectOption('light');
+    await setTheme(page, 'light');
     assert.equal(await page.locator('#document-json').inputValue(), changed);
     await page.locator('#undo-document').click();
     assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()), original);
@@ -547,7 +804,7 @@ test('switching themes preserves Document settings, history and session state', 
     assert.equal(await page.locator('#colours-enabled').isDisabled(), true);
     assert.equal(await page.locator('#compact-nodes').isDisabled(), true);
     const incompatibleJSON = await page.locator('#document-json').inputValue();
-    await page.getByLabel('Theme').selectOption('dark');
+    await setTheme(page, 'dark');
     assert.equal(await page.locator('#document-json').inputValue(), incompatibleJSON);
     assert.equal(await page.locator('#unsaved-indicator').textContent(), '');
   } finally {
@@ -590,6 +847,8 @@ test('opens in View and enables Document editing only in Edit', async () => {
     assert.equal(await page.locator('#compact-nodes').isDisabled(), true);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     assert.equal(await page.locator('#document-json').isEditable(), true);
+    assert.equal(await page.locator('#edit-entity-form').isVisible(), false);
+    await openEntityEditor(page);
     assert.equal(await page.locator('#edit-entity-form').isVisible(), true);
     assert.equal(await page.locator('#compact-nodes').isEnabled(), true);
   } finally {
@@ -642,6 +901,7 @@ test('resolves contextual drafts and protects invalid drafts when switching mode
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('B');
     await page.getByRole('button', { name: 'View', exact: true }).click();
     await page.locator('#draft-resolution').getByRole('button', { name: 'Apply Entity draft' }).click();
@@ -796,11 +1056,13 @@ test('edits and downloads a Document that can be uploaded offline with metadata 
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="Source"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('Renamed');
     await page.locator('#edit-entity-description').fill('Updated');
     await page.locator('#edit-entity-form button[type=submit]').click();
     await openFind(page);
     await page.locator('#entity-results button[title="Report"]').click();
+    await openEntityEditor(page);
     await page.locator('#new-dependency-name').fill('External');
     await page.locator('#add-dependency-form button[type=submit]').click();
     await openSettings(page);
@@ -847,6 +1109,7 @@ test('keeps form drafts visible and blocks download and selection until resolved
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('B');
     assert.equal(await page.locator('#download-document').isDisabled(), true);
     await openFind(page);
@@ -883,11 +1146,13 @@ test('protects invalid drafts and unsaved changes while supporting undo and redo
     await page.locator('#document-json').fill('{"entities":[{"name":"B","dependencies":[]}]}');
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('C');
     await page.locator('#edit-entity-form button[type=submit]').click();
     assert.match((await page.locator('#edit-entity-error').textContent())!, /apply or discard/i);
     assert.equal(await page.locator('#download-document').isDisabled(), true);
     await page.locator('#discard-entity-draft').click();
+    await page.locator('#document-panel summary').click();
     await page.locator('#apply-document').click();
     assert.match((await page.locator('#graph-summary').textContent())!, /B/);
     await page.locator('#undo-document').click();
@@ -1023,6 +1288,7 @@ test('graph edits preserve the filter and dependency view', async () => {
     await page.getByRole('button', { name: 'Upstream' }).click();
     await openFilter(page);
     await page.locator('#graph-filter').fill('Al');
+    await openEntityEditor(page);
     await page.locator('#edit-entity-description').fill('Updated');
     await page.getByRole('button', { name: 'Apply Entity changes' }).click();
     assert.equal(await page.locator('#graph-filter').inputValue(), 'Al');
@@ -1084,6 +1350,8 @@ test('narrow screens keep File and graph controls reachable', async () => {
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
+    await page.locator('#dismiss-small-screen').click();
+    await page.locator('#toggle-controls').click();
     await page.getByRole('button', { name: 'File', exact: true }).click();
     assert.equal(await page.locator('#file-copy-document').isVisible(), true);
     await page.getByRole('button', { name: 'File', exact: true }).click();
@@ -1103,22 +1371,53 @@ test('narrow screens keep File and graph controls reachable', async () => {
   }
 });
 
-test('Filter is a temporary surface with an active label and clear action', async () => {
+test('top bar follows the prototype layout and keeps edit controls mode-specific', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await newPage(browser, { viewport: { width: 1440, height: 800 } });
+    await page.goto(viewer);
+    await page.locator('#paste-json').fill('{"entities":[{"name":"One","dependencies":[]}]}');
+    await page.locator('#open-paste').click();
+    const header = page.locator('header');
+    const style = await header.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { border: css.borderTopColor, shadow: css.boxShadow };
+    });
+    assert.equal(style.border, 'rgb(228, 230, 235)');
+    assert.notEqual(style.shadow, 'none');
+    const file = (await page.locator('#toggle-file-panel').boundingBox())!;
+    const filter = (await page.locator('#graph-filter').boundingBox())!;
+    const mode = (await page.locator('.mode-switch').boundingBox())!;
+    const theme = (await page.locator('#toggle-theme').boundingBox())!;
+    assert.ok(file.x < filter.x && filter.x < mode.x && mode.x < theme.x);
+    assert.equal(await page.locator('#undo-document').isVisible(), false);
+    await page.locator('#mode-edit').click();
+    assert.equal(await page.locator('#undo-document').isVisible(), true);
+    await openSettings(page);
+    const settings = (await page.locator('.colour-settings-content').boundingBox())!;
+    assert.ok(settings.x >= 0 && settings.x + settings.width <= 1440);
+    await page.locator('#colour-settings summary').click();
+    await setTheme(page, 'dark');
+    assert.equal(await header.evaluate((element) => getComputedStyle(element).borderTopColor), 'rgb(48, 52, 64)');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('Filter is inline in the top bar and can be cleared by keyboard', async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await newPage(browser);
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"One","dependencies":[]}]}');
     await page.locator('#open-paste').click();
-    assert.equal(await page.locator('#graph-filter').isVisible(), false);
-    await page.locator('#filter-menu summary').click();
+    assert.equal(await page.locator('header #graph-filter').isVisible(), true);
     await page.locator('#graph-filter').fill(' One ');
-    assert.match((await page.locator('#filter-menu summary').textContent())!, /One/);
-    await page.locator('#filter-menu summary').click();
-    assert.equal(await page.locator('#graph-filter').isVisible(), false);
-    await page.locator('#filter-menu summary').click();
-    await page.getByRole('button', { name: 'Clear graph filter' }).click();
-    assert.doesNotMatch((await page.locator('#filter-menu summary').textContent())!, /One/);
+    assert.match((await page.locator('#graph-count').textContent())!, /^1 Entity/);
+    await page.getByRole('button', { name: 'Clear graph filter' }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#graph-filter').inputValue(), '');
+    assert.equal(await page.locator('#graph-filter').evaluate((element) => element === document.activeElement), true);
   } finally {
     await browser.close();
   }
@@ -1131,6 +1430,8 @@ test('narrow-screen Settings and Filter remain usable', async () => {
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').click();
+    await page.locator('#dismiss-small-screen').click();
+    await page.locator('#toggle-controls').click();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openSettings(page);
     const settingsBounds = (await page.locator('.colour-settings-content').boundingBox())!;
@@ -1138,11 +1439,10 @@ test('narrow-screen Settings and Filter remain usable', async () => {
     await page.locator('#compact-nodes').check();
     await page.locator('#colour-settings summary').click();
     await openFilter(page);
-    const filterBounds = (await page.locator('.filter-menu-content').boundingBox())!;
+    const filterBounds = (await page.locator('#graph-filter-control').boundingBox())!;
     assert.ok(filterBounds.x >= 0 && filterBounds.x + filterBounds.width <= 375);
     await page.locator('#graph-filter').fill('A');
     await page.getByRole('button', { name: 'Clear graph filter' }).click();
-    await page.locator('#filter-menu summary').click();
     await page.locator('#export-menu summary').click();
     assert.equal(await page.locator('#export-png').isEnabled(), true);
   } finally {
@@ -1274,7 +1574,9 @@ test('protects Entity drafts when another Entity is explicitly selected', async 
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-name').fill('Changed');
+    await openFind(page);
     await page.locator('#entity-results button[title="B"]').click();
     assert.equal(await page.locator('#edit-entity-name').inputValue(), 'Changed');
     await page.getByRole('button', { name: 'Stay on current Entity' }).click();
@@ -1317,6 +1619,7 @@ test('opens property editing for the inspected Entity', async () => {
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="B"]').click();
+    await openEntityEditor(page);
     await page.locator('#inspector').getByRole('button', { name: 'Edit properties' }).click();
     assert.equal(await page.locator('#metadata-entity').inputValue(), 'B');
     assert.equal(await page.locator('#metadata-panel').evaluate((element: HTMLDetailsElement) => element.open), true);
@@ -1379,6 +1682,7 @@ test('keeps moved card position after applying an Entity edit', async () => {
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.getByRole('button', { name: 'Move card' }).click();
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
@@ -1405,6 +1709,7 @@ test('moved card protects Direct dependency drafts from automatic inspection and
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.getByRole('button', { name: 'Move card' }).click();
     await page.keyboard.press('ArrowUp');
     await page.keyboard.press('Enter');
@@ -1434,6 +1739,7 @@ test('offers searchable existing Entities and exact undocumented dependency name
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await openFind(page);
     await page.locator('#entity-results button[title="Report"]').click();
+    await openEntityEditor(page);
     const input = page.getByLabel('Direct dependency name');
     const list = await input.getAttribute('list');
     assert.ok(list);
@@ -1446,7 +1752,10 @@ test('offers searchable existing Entities and exact undocumented dependency name
     await input.fill('Source');
     await page.getByRole('button', { name: 'Add dependency', exact: true }).click();
     await page.getByLabel('Direct dependency name').fill('External');
-    await page.getByLabel('Direct dependency name').press('Enter');
+    if (browserName === 'webkit') {
+      await page.getByRole('button', { name: 'Add dependency', exact: true }).focus();
+      await page.keyboard.press('Enter');
+    } else await page.getByLabel('Direct dependency name').press('Enter');
     const saved = JSON.parse(await page.locator('#document-json').inputValue());
     assert.deepEqual(saved.entities, [
       { name: 'Report', dependencies: ['Source', 'External'] },
@@ -1557,6 +1866,7 @@ test('rejects invalid connections and protects drafts for both editing paths', a
     assert.match((await page.locator('#connection-status').textContent())!, /cycle/i);
     await openFind(page);
     await page.locator('#entity-results button[title="Report"]').click();
+    await openEntityEditor(page);
     await page.getByLabel('Direct dependency name').fill('Source');
     await page.getByRole('button', { name: 'Add dependency', exact: true }).click();
     assert.match((await page.locator('#dependency-error').textContent())!, /already exists/i);
@@ -1574,6 +1884,7 @@ test('rejects invalid connections and protects drafts for both editing paths', a
     await page.locator('#add-entity-panel summary').click();
     await openFind(page);
     await page.locator('#entity-results button[title="Report"]').click();
+    await openEntityEditor(page);
     await page.getByRole('button', { name: 'Remove Direct dependency Source', exact: true }).click();
     assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities[1].dependencies, []);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -1599,6 +1910,7 @@ test('touch users can add an undocumented dependency using the details form', as
     await page.getByRole('button', { name: 'Edit', exact: true }).tap();
     await page.locator('#entity-list summary').tap();
     await page.locator('#entity-results button[title="Report"]').tap();
+    await page.getByRole('button', { name: 'Edit Entity', exact: true }).tap();
     await page.getByLabel('Direct dependency name').fill('Remote');
     await page.getByRole('button', { name: 'Add dependency', exact: true }).tap();
     assert.deepEqual(JSON.parse(await page.locator('#document-json').inputValue()).entities, [
@@ -1796,6 +2108,7 @@ test('moving an Entity preserves unsaved Document changes and does not add undo 
     await page.locator('#mode-edit').click();
     await openFind(page);
     await page.locator('#entity-results button[title="A"]').click();
+    await openEntityEditor(page);
     await page.locator('#edit-entity-description').fill('Changed');
     await page.locator('#edit-entity-form button[type=submit]').click();
     const changed = await page.locator('#document-json').inputValue();
@@ -1825,6 +2138,8 @@ test('narrow touch layout keeps navigation and form editing reachable without dr
     await page.goto(viewer);
     await page.locator('#paste-json').fill('{"entities":[{"name":"A","dependencies":[]}]}');
     await page.locator('#open-paste').tap();
+    await page.locator('#dismiss-small-screen').tap();
+    await page.locator('#toggle-controls').tap();
     await page.locator('#mode-edit').tap();
     for (const selector of [
       '#entity-list summary',
@@ -1841,6 +2156,7 @@ test('narrow touch layout keeps navigation and form editing reachable without dr
     await page.locator('#new-entity-name').fill('Touch Entity');
     await page.locator('#add-entity-form button[type=submit]').tap();
     assert.match((await page.locator('#graph-summary').textContent())!, /Touch Entity/);
+    await page.locator('#add-entity-panel summary').tap();
     const card = page.locator('#inspector');
     assert.equal(await card.isVisible(), true);
     for (const selector of ['#move-inspector', '#move-entity', '#close-inspector']) {

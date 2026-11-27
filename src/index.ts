@@ -10,6 +10,44 @@ import { setupTheme } from './theme';
 import type { Graph } from './document-types';
 
 setupTheme(window, document);
+const controlsToggle = document.getElementById('toggle-controls') as HTMLButtonElement;
+const smallNotice = document.getElementById('small-screen-notice') as HTMLElement;
+function measureSmallNotice() {
+  document.documentElement.style.setProperty('--small-notice-height', `${smallNotice.offsetHeight}px`);
+}
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measureSmallNotice).observe(smallNotice);
+let smallScreen = false;
+function updateSmallScreen() {
+  const small = window.innerWidth < 680 || window.innerHeight < 500;
+  if (small === smallScreen) return;
+  const active = document.activeElement;
+  smallScreen = small;
+  document.body.dataset.smallScreen = String(small);
+  document.body.dataset.controlsOpen = 'false';
+  controlsToggle.hidden = !small;
+  controlsToggle.setAttribute('aria-expanded', 'false');
+  controlsToggle.setAttribute('aria-label', 'Show workspace controls');
+  smallNotice.hidden = !small;
+  measureSmallNotice();
+  if (small && active instanceof HTMLElement && active.closest('header, .workspace-toolbar, .controls'))
+    controlsToggle.focus();
+}
+controlsToggle.addEventListener('click', () => {
+  const open = controlsToggle.getAttribute('aria-expanded') !== 'true';
+  controlsToggle.setAttribute('aria-expanded', String(open));
+  controlsToggle.setAttribute('aria-label', open ? 'Hide workspace controls' : 'Show workspace controls');
+  document.body.dataset.controlsOpen = String(open);
+  if (!open) controlsToggle.focus();
+  positionSurfaces();
+});
+(document.getElementById('dismiss-small-screen') as HTMLButtonElement).addEventListener('click', () => {
+  smallNotice.hidden = true;
+});
+window.addEventListener('resize', () => {
+  updateSmallScreen();
+  measureSmallNotice();
+});
+updateSmallScreen();
 const fileInput = document.getElementById('dependency-file') as HTMLInputElement;
 const fileError = document.getElementById('file-error') as HTMLElement;
 const filePanel = document.getElementById('file-panel') as HTMLElement;
@@ -141,13 +179,22 @@ function renderGraph(
   selectEditedEntity = false,
 ) {
   const cardState = preserveCard ? getCardState() : undefined;
+  const editorOpen = preserveCard && document.getElementById('inspector')?.classList.contains('editor-open');
   const navigationState = preserveCard ? getNavigationState() : undefined;
   const layoutState = position && selectedName ? getLayoutState() : undefined;
   if (layoutState && position && selectedName) layoutState.positions.set(selectedName, position);
   cleanupGraph();
   inspection = null;
   toolbarObserver?.disconnect();
+  for (const id of ['entity-list', 'graph-filter-control', 'colour-settings', 'export-menu'])
+    header.querySelector(`#${id}`)?.remove();
   document.querySelector('main')!.replaceWith(mainTemplate.cloneNode(true));
+  for (const id of ['entity-list', 'graph-filter-control']) {
+    header.insertBefore(document.getElementById(id)!, document.querySelector('.mode-switch'));
+  }
+  for (const id of ['colour-settings', 'export-menu']) {
+    header.insertBefore(document.getElementById(id)!, document.getElementById('toggle-theme'));
+  }
   if (typeof ResizeObserver !== 'undefined') {
     const toolbar = document.querySelector('.workspace-toolbar')!;
     toolbarObserver = new ResizeObserver(positionSurfaces);
@@ -186,6 +233,7 @@ function renderGraph(
       (document.getElementById('new-entity-name') as HTMLInputElement).focus();
     },
     editProperties: (name) => {
+      if (smallScreen && controlsToggle.getAttribute('aria-expanded') !== 'true') controlsToggle.click();
       metadataEntity.value = name;
       resetMetadataProperties();
       const panel = document.getElementById('metadata-panel') as HTMLDetailsElement;
@@ -193,6 +241,10 @@ function renderGraph(
       metadataProperty.focus();
     },
   });
+  if (editorOpen) {
+    const toggle = document.querySelector<HTMLButtonElement>('.entity-editor-toggle');
+    toggle?.click();
+  }
   if (!graph.entities.length) {
     (document.getElementById('status') as HTMLElement).textContent = 'No entities in this dependency dataset.';
   }

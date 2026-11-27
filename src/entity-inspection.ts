@@ -47,6 +47,8 @@ export function setupEntityInspection({
   function showEntity(name: string) {
     dependencyDraft = null;
     const entity = entities.get(name)!;
+    const card = document.getElementById('inspector') as HTMLElement;
+    card.classList.remove('editor-open');
     inspector.replaceChildren();
     const heading = document.createElement('h2');
     heading.textContent = entity.name;
@@ -55,6 +57,25 @@ export function setupEntityInspection({
     badge.className = entity.documented ? 'documented-badge' : 'undocumented-badge';
     badge.textContent = entity.documented ? 'Documented entity' : 'Undocumented entity';
     inspector.appendChild(badge);
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'edit-only entity-editor-toggle';
+    editButton.textContent = 'Edit Entity';
+    editButton.setAttribute('aria-expanded', 'false');
+    editButton.addEventListener('click', () => {
+      const open = card.classList.toggle('editor-open');
+      editButton.setAttribute('aria-expanded', String(open));
+      editButton.textContent = open ? 'Close editor' : 'Edit Entity';
+      if (open) {
+        for (const id of ['entity-list', 'colour-settings', 'export-menu']) {
+          (document.getElementById(id) as HTMLDetailsElement).open = false;
+        }
+        card.style.left = `${Math.max(0, Math.min(card.offsetLeft, window.innerWidth - card.offsetWidth))}px`;
+        card.style.top = `${Math.max(0, Math.min(card.offsetTop, window.innerHeight - card.offsetHeight))}px`;
+        nameInput.focus();
+      }
+    });
+    inspector.appendChild(editButton);
     const form = document.createElement('form');
     form.id = 'edit-entity-form';
     form.className = 'edit-only';
@@ -124,7 +145,7 @@ export function setupEntityInspection({
     if (entity.documented) {
       const propertiesButton = document.createElement('button');
       propertiesButton.type = 'button';
-      propertiesButton.className = 'edit-only';
+      propertiesButton.className = 'edit-only entity-edit-control';
       propertiesButton.textContent = 'Edit properties';
       propertiesButton.addEventListener('click', () => {
         try {
@@ -139,10 +160,10 @@ export function setupEntityInspection({
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.id = 'delete-entity';
-    deleteButton.className = 'edit-only';
+    deleteButton.className = 'edit-only entity-edit-control';
     deleteButton.textContent = 'Remove Entity';
     const confirmation = document.createElement('fieldset');
-    confirmation.className = 'edit-only';
+    confirmation.className = 'edit-only entity-edit-control';
     confirmation.hidden = true;
     const prompt = document.createElement('legend');
     prompt.textContent =
@@ -241,7 +262,7 @@ export function setupEntityInspection({
           if (remove) {
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
-            removeButton.className = 'edit-only';
+            removeButton.className = 'edit-only entity-edit-control';
             removeButton.textContent = 'Remove';
             removeButton.setAttribute('aria-label', `Remove Direct dependency ${relatedName}`);
             removeButton.addEventListener('click', () => remove(relatedName));
